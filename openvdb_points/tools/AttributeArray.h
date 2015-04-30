@@ -197,6 +197,7 @@ public:
     bool isCompressed() const { return mCompressedBytes != 0; }
     /// Compress the attribute array.
     virtual bool compress() = 0;
+    virtual bool compress() const = 0;
     /// Uncompress the attribute array.
     virtual bool decompress() = 0;
 
@@ -307,6 +308,7 @@ public:
 
     /// Compress the attribute array.
     virtual bool compress();
+    virtual bool compress() const;
     /// Uncompress the attribute array.
     virtual bool decompress();
 
@@ -908,6 +910,12 @@ TypedAttributeArray<ValueType_, Codec_>::compress()
     return false;
 }
 
+template<typename ValueType_, typename Codec_>
+inline bool
+TypedAttributeArray<ValueType_, Codec_>::compress() const
+{
+    return const_cast<TypedAttributeArray*>(this)->compress();
+}
 
 template<typename ValueType_, typename Codec_>
 inline bool
