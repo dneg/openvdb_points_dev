@@ -42,12 +42,14 @@ public:
     CPPUNIT_TEST(testAttributeArray);
     CPPUNIT_TEST(testAttributeSetDescriptor);
     CPPUNIT_TEST(testAttributeSet);
+    CPPUNIT_TEST(testAttributeTypes);
 
     CPPUNIT_TEST_SUITE_END();
 
     void testAttributeArray();
     void testAttributeSetDescriptor();
     void testAttributeSet();
+    void testAttributeTypes();
 }; // class TestPointDataGrid
 
 CPPUNIT_TEST_SUITE_REGISTRATION(TestAttributeArray);
@@ -101,6 +103,19 @@ attributeSetMatchesDescriptor(  const openvdb::tools::AttributeSet& attrSet,
     }
 
     return true;
+}
+
+template <typename TypedAttributeArray>
+void
+setAttributeValue(openvdb::tools::AttributeSet& attributeSet, const size_t pos, const int value)
+{
+    openvdb::tools::AttributeArray* array = attributeSet.get(pos);
+
+    CPPUNIT_ASSERT(array->isType<TypedAttributeArray>());
+
+    TypedAttributeArray* typedArray = static_cast<TypedAttributeArray*>(array);
+
+    typedArray->template set<typename TypedAttributeArray::ValueType>(0, typename TypedAttributeArray::ValueType(value));
 }
 
 } //unnamed  namespace
@@ -616,6 +631,233 @@ TestAttributeArray::testAttributeSet()
     CPPUNIT_ASSERT(matchingAttributeSets(attrSetA, attrSetB));
 }
 
+void
+TestAttributeArray::testAttributeTypes()
+{
+    using namespace openvdb;
+    using namespace openvdb::tools;
+    using namespace openvdb::math;
+
+    // scalar attributes - no compression
+
+    typedef TypedAttributeArray<bool>                                                         AttributeB;
+    typedef TypedAttributeArray<short>                                                        AttributeSh;
+    typedef TypedAttributeArray<int>                                                          AttributeI;
+    typedef TypedAttributeArray<long>                                                         AttributeL;
+    typedef TypedAttributeArray<half>                                                         AttributeH;
+    typedef TypedAttributeArray<float>                                                        AttributeF;
+    typedef TypedAttributeArray<double>                                                       AttributeD;
+
+    // scalar attributes - truncate compression
+
+    typedef TypedAttributeArray<float, NullAttributeCodec<half> >                             AttributeFH;
+    typedef TypedAttributeArray<double, NullAttributeCodec<half> >                            AttributeDH;
+    typedef TypedAttributeArray<double, NullAttributeCodec<float> >                           AttributeDF;
+
+    // vector attributes - no compression
+
+    typedef TypedAttributeArray<Vec3<short> >                                                 AttributeVec3sh;
+    typedef TypedAttributeArray<Vec3i>                                                        AttributeVec3i;
+    typedef TypedAttributeArray<Vec3<long> >                                                  AttributeVec3l;
+    typedef TypedAttributeArray<Vec3<half> >                                                  AttributeVec3h;
+    typedef TypedAttributeArray<Vec3f>                                                        AttributeVec3f;
+    typedef TypedAttributeArray<Vec3d>                                                        AttributeVec3d;
+
+    // vector attributes - fixed point compression
+
+    typedef TypedAttributeArray<Vec3<half>, FixedPointAttributeCodec<Vec3<uint8_t> > >        AttributeVec3hFxPt8;
+    typedef TypedAttributeArray<Vec3f, FixedPointAttributeCodec<Vec3<uint8_t> > >             AttributeVec3fFxPt8;
+    typedef TypedAttributeArray<Vec3d, FixedPointAttributeCodec<Vec3<uint8_t> > >             AttributeVec3dFxPt8;
+
+    typedef TypedAttributeArray<Vec3<half>, FixedPointAttributeCodec<Vec3<uint16_t> > >       AttributeVec3hFxPt16;
+    typedef TypedAttributeArray<Vec3f, FixedPointAttributeCodec<Vec3<uint16_t> > >            AttributeVec3fFxPt16;
+    typedef TypedAttributeArray<Vec3d, FixedPointAttributeCodec<Vec3<uint16_t> > >            AttributeVec3dFxPt16;
+
+    // vector attributes - fixed position compression
+
+    typedef TypedAttributeArray<Vec3<half>, FixedPositionAttributeCodec<Vec3<uint8_t> > >     AttributeVec3hFxPs8;
+    typedef TypedAttributeArray<Vec3f, FixedPositionAttributeCodec<Vec3<uint8_t> > >          AttributeVec3fFxPs8;
+    typedef TypedAttributeArray<Vec3d, FixedPositionAttributeCodec<Vec3<uint8_t> > >          AttributeVec3dFxPs8;
+
+    typedef TypedAttributeArray<Vec3<half>, FixedPositionAttributeCodec<Vec3<uint16_t> > >    AttributeVec3hFxPs16;
+    typedef TypedAttributeArray<Vec3f, FixedPositionAttributeCodec<Vec3<uint16_t> > >         AttributeVec3fFxPs16;
+    typedef TypedAttributeArray<Vec3d, FixedPositionAttributeCodec<Vec3<uint16_t> > >         AttributeVec3dFxPs16;
+
+    // vector attributes - unit vector compression
+
+    typedef TypedAttributeArray<Vec3<half>, UnitVecAttributeCodec<uint16_t> >                 AttributeVec3hUVec16;
+    typedef TypedAttributeArray<Vec3f, UnitVecAttributeCodec<uint16_t> >                      AttributeVec3fUVec16;
+    typedef TypedAttributeArray<Vec3d, UnitVecAttributeCodec<uint16_t> >                      AttributeVec3dUVec16;
+
+    // vector attributes - vector compression
+
+    typedef TypedAttributeArray<Vec3<half>, VecAttributeCodec<half, uint16_t> >               AttributeVec3hVech16;
+    typedef TypedAttributeArray<Vec3f, VecAttributeCodec<float, uint16_t> >                   AttributeVec3fVecf16;
+    typedef TypedAttributeArray<Vec3d, VecAttributeCodec<double, uint16_t> >                  AttributeVec3dVecd16;
+
+    AttributeB::registerType();
+    AttributeSh::registerType();
+    AttributeI::registerType();
+    AttributeL::registerType();
+    AttributeH::registerType();
+    AttributeF::registerType();
+    AttributeD::registerType();
+    AttributeFH::registerType();
+    AttributeDH::registerType();
+    AttributeDF::registerType();
+    AttributeVec3sh::registerType();
+    AttributeVec3i::registerType();
+    AttributeVec3l::registerType();
+    AttributeVec3h::registerType();
+    AttributeVec3f::registerType();
+    AttributeVec3d::registerType();
+    AttributeVec3hFxPt8::registerType();
+    AttributeVec3fFxPt8::registerType();
+    AttributeVec3dFxPt8::registerType();
+    AttributeVec3hFxPt16::registerType();
+    AttributeVec3fFxPt16::registerType();
+    AttributeVec3dFxPt16::registerType();
+    AttributeVec3hFxPs8::registerType();
+    AttributeVec3fFxPs8::registerType();
+    AttributeVec3dFxPs8::registerType();
+    AttributeVec3hFxPs16::registerType();
+    AttributeVec3fFxPs16::registerType();
+    AttributeVec3dFxPs16::registerType();
+    AttributeVec3hUVec16::registerType();
+    AttributeVec3fUVec16::registerType();
+    AttributeVec3dUVec16::registerType();
+    AttributeVec3hVech16::registerType();
+    AttributeVec3fVecf16::registerType();
+    AttributeVec3dVecd16::registerType();
+
+    // create a Descriptor and AttributeSet
+
+    typedef AttributeSet::Descriptor Descriptor;
+
+    Descriptor::Ptr descr = Descriptor::create(Descriptor::Inserter()
+        .add("pos", AttributeVec3f::attributeType())
+        .add("id", AttributeI::attributeType())
+        .vec);
+
+    AttributeSet attrSet(descr, /*arrayLength=*/50);
+
+    // retrieve the type of the first attribute (pos)
+
+    const std::string& type = descr->type(0);
+
+    // run-time to compile-time dispatch (this is not ideal)
+
+    if (type == AttributeB::attributeType()) {
+        setAttributeValue<AttributeB>(attrSet, 0, 10);
+    }
+    else if (type == AttributeSh::attributeType()) {
+        setAttributeValue<AttributeSh>(attrSet, 0, 10);
+    }
+    else if (type == AttributeI::attributeType()) {
+        setAttributeValue<AttributeI>(attrSet, 0, 10);
+    }
+    else if (type == AttributeL::attributeType()) {
+        setAttributeValue<AttributeL>(attrSet, 0, 10);
+    }
+    else if (type == AttributeH::attributeType()) {
+        setAttributeValue<AttributeH>(attrSet, 0, 10);
+    }
+    else if (type == AttributeF::attributeType()) {
+        setAttributeValue<AttributeF>(attrSet, 0, 10);
+    }
+    else if (type == AttributeD::attributeType()) {
+        setAttributeValue<AttributeD>(attrSet, 0, 10);
+    }
+    else if (type == AttributeFH::attributeType()) {
+        setAttributeValue<AttributeFH>(attrSet, 0, 10);
+    }
+    else if (type == AttributeDH::attributeType()) {
+        setAttributeValue<AttributeDH>(attrSet, 0, 10);
+    }
+    else if (type == AttributeDF::attributeType()) {
+        setAttributeValue<AttributeDF>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3sh::attributeType()) {
+        setAttributeValue<AttributeVec3sh>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3i::attributeType()) {
+        setAttributeValue<AttributeVec3i>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3l::attributeType()) {
+        setAttributeValue<AttributeVec3l>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3h::attributeType()) {
+        setAttributeValue<AttributeVec3h>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3f::attributeType()) {
+        setAttributeValue<AttributeVec3f>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3d::attributeType()) {
+        setAttributeValue<AttributeVec3d>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3hFxPt8::attributeType()) {
+        setAttributeValue<AttributeVec3hFxPt8>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3fFxPt8::attributeType()) {
+        setAttributeValue<AttributeVec3fFxPt8>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3dFxPt8::attributeType()) {
+        setAttributeValue<AttributeVec3dFxPt8>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3hFxPt16::attributeType()) {
+        setAttributeValue<AttributeVec3hFxPt16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3fFxPt16::attributeType()) {
+        setAttributeValue<AttributeVec3fFxPt16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3dFxPt16::attributeType()) {
+        setAttributeValue<AttributeVec3dFxPt16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3hFxPs8::attributeType()) {
+        setAttributeValue<AttributeVec3hFxPs8>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3fFxPs8::attributeType()) {
+        setAttributeValue<AttributeVec3fFxPs8>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3dFxPs8::attributeType()) {
+        setAttributeValue<AttributeVec3dFxPs8>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3hFxPs16::attributeType()) {
+        setAttributeValue<AttributeVec3hFxPs16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3fFxPs16::attributeType()) {
+        setAttributeValue<AttributeVec3fFxPs16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3dFxPs16::attributeType()) {
+        setAttributeValue<AttributeVec3dFxPs16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3hUVec16::attributeType()) {
+        setAttributeValue<AttributeVec3hUVec16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3fUVec16::attributeType()) {
+        setAttributeValue<AttributeVec3fUVec16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3dUVec16::attributeType()) {
+        setAttributeValue<AttributeVec3dUVec16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3hVech16::attributeType()) {
+        setAttributeValue<AttributeVec3hVech16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3fVecf16::attributeType()) {
+        setAttributeValue<AttributeVec3fVecf16>(attrSet, 0, 10);
+    }
+    else if (type == AttributeVec3dVecd16::attributeType()) {
+        setAttributeValue<AttributeVec3dVecd16>(attrSet, 0, 10);
+    }
+
+    // check value has been correctly set
+
+    AttributeVec3f* array = static_cast<AttributeVec3f*>(attrSet.get(0));
+
+    CPPUNIT_ASSERT(array);
+
+    CPPUNIT_ASSERT(array->get(0) == Vec3f(10));
+}
 
 // Copyright (c) 2012-2014 DreamWorks Animation LLC
 // All rights reserved. This software is distributed under the
