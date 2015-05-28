@@ -37,7 +37,7 @@
 #include "AttributeArray.h"
 
 #include <algorithm> // std::equal
-
+#include <boost/algorithm/string.hpp> // boost::split
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -493,6 +493,7 @@ AttributeSet::operator==(const AttributeSet& other) const {
 AttributeSet::Descriptor::Descriptor()
     : mNameMap()
     , mTypes()
+    , mValueTypes()
 {
 }
 
@@ -526,6 +527,7 @@ AttributeSet::Descriptor::memUsage() const
 
     for (size_t n = 0, N = mTypes.size(); n < N; ++n) {
          bytes += mTypes[n].capacity();
+         bytes += mValueTypes[n].capacity();
     }
 
     return sizeof(*this) + bytes;
@@ -563,7 +565,7 @@ AttributeSet::Descriptor::rename(const std::string& fromName, const std::string&
 
 
 size_t
-AttributeSet::Descriptor::insert(const std::string& name, const std::string& typeName)
+AttributeSet::Descriptor::insert(const std::string& name, const std::string& attributeType)
 {
     size_t pos = INVALID_POS;
     NameToPosMap::iterator it = mNameMap.find(name);
@@ -571,13 +573,17 @@ AttributeSet::Descriptor::insert(const std::string& name, const std::string& typ
         pos = it->second;
     } else {
 
-        if (!AttributeArray::isRegistered(typeName)) {
+        if (!AttributeArray::isRegistered(attributeType)) {
             OPENVDB_THROW(KeyError, "Failed to insert '" << name
-                << "' with unregistered attribute type '" << typeName);
+                << "' with unregistered attribute type '" << attributeType);
         }
 
+        std::vector<std::string> attributeList;
+        boost::split(attributeList, attributeType, boost::is_any_of("_"));
+
         pos = mTypes.size();
-        mTypes.push_back(typeName);
+        mTypes.push_back(attributeType);
+        mValueTypes.push_back(attributeList.size() > 0 ? attributeList[0] : "");
         mNameMap.insert(it, NameToPosMap::value_type(name, pos));
     }
     return pos;
@@ -677,6 +683,7 @@ AttributeSet::Descriptor::write(std::ostream& os) const
 
     for(Index64 n = 0; n < arraylength; ++n) {
         writeString(os, mTypes[n]);
+        writeString(os, mValueTypes[n]);
     }
 
     NameToPosMap::const_iterator it = mNameMap.begin(), endIt = mNameMap.end();
@@ -694,9 +701,11 @@ AttributeSet::Descriptor::read(std::istream& is)
     is.read(reinterpret_cast<char*>(&arraylength), sizeof(Index64));
 
     std::vector<std::string>(size_t(arraylength)).swap(mTypes);
+    std::vector<std::string>(size_t(arraylength)).swap(mValueTypes);
 
     for(Index64 n = 0; n < arraylength; ++n) {
          mTypes[n] = readString(is);
+         mValueTypes[n] = readString(is);
     }
 
     mNameMap.clear();

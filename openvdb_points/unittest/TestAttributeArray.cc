@@ -111,7 +111,7 @@ setAttributeValue(openvdb::tools::AttributeSet& attributeSet, const size_t pos, 
 {
     openvdb::tools::AttributeArray* array = attributeSet.get(pos);
 
-    CPPUNIT_ASSERT(array->isType<TypedAttributeArray>());
+    CPPUNIT_ASSERT(array->isValueType<TypedAttributeArray>());
 
     TypedAttributeArray* typedArray = static_cast<TypedAttributeArray*>(array);
 
@@ -127,10 +127,12 @@ setAttributeValue(openvdb::tools::AttributeSet& attributeSet, const size_t pos, 
 void
 TestAttributeArray::testAttributeArray()
 {
-    typedef openvdb::tools::TypedAttributeArray<double> AttributeArrayD;
+    using namespace openvdb::tools;
+
+    typedef TypedAttributeArray<double> AttributeArrayD;
 
     {
-        openvdb::tools::AttributeArray::Ptr attr(new AttributeArrayD(50));
+        AttributeArray::Ptr attr(new CompressedAttributeArray<double>(50));
 
         CPPUNIT_ASSERT_EQUAL(size_t(50), attr->size());
 
@@ -144,13 +146,12 @@ TestAttributeArray::testAttributeArray()
         CPPUNIT_ASSERT_DOUBLES_EQUAL(double(0.5), value, /*tolerance=*/double(0.0));
     }
 
-    typedef openvdb::tools::FixedPointAttributeCodec<uint16_t> FixedPointCodec;
-    typedef openvdb::tools::TypedAttributeArray<double, FixedPointCodec> AttributeArrayC;
+    typedef FixedPointAttributeCodec<uint16_t> FixedPointCodec;
 
     {
-        openvdb::tools::AttributeArray::Ptr attr(new AttributeArrayC(50));
+        AttributeArray::Ptr attr(new CompressedAttributeArray<double, FixedPointCodec>(50));
 
-        AttributeArrayC& typedAttr = static_cast<AttributeArrayC&>(*attr);
+        AttributeArrayD& typedAttr = static_cast<AttributeArrayD&>(*attr);
 
         typedAttr.set(0, 0.5);
 
@@ -160,18 +161,18 @@ TestAttributeArray::testAttributeArray()
         CPPUNIT_ASSERT_DOUBLES_EQUAL(double(0.5), value, /*tolerance=*/double(0.0001));
     }
 
-    typedef openvdb::tools::TypedAttributeArray<int> AttributeArrayI;
+    typedef TypedAttributeArray<int> AttributeArrayI;
 
     { // Base class API
 
-        openvdb::tools::AttributeArray::Ptr attr(new AttributeArrayI(50));
+        AttributeArray::Ptr attr(new CompressedAttributeArray<int>(50));
 
         CPPUNIT_ASSERT_EQUAL(size_t(50), attr->size());
 
         CPPUNIT_ASSERT_EQUAL((sizeof(AttributeArrayI) + sizeof(int)), attr->memUsage());
 
-        CPPUNIT_ASSERT(attr->isType<AttributeArrayI>());
-        CPPUNIT_ASSERT(!attr->isType<AttributeArrayD>());
+        CPPUNIT_ASSERT(attr->isType<CompressedAttributeArray<int> >());
+        CPPUNIT_ASSERT(!attr->isType<CompressedAttributeArray<double> >());
 
         CPPUNIT_ASSERT(*attr == *attr);
     }
@@ -182,7 +183,7 @@ TestAttributeArray::testAttributeArray()
         const size_t uniformMemUsage = sizeof(AttributeArrayI) + sizeof(int);
         const size_t expandedMemUsage = sizeof(AttributeArrayI) + count * sizeof(int);
 
-        AttributeArrayI attr(count);
+        CompressedAttributeArray<int> attr(count);
 
         CPPUNIT_ASSERT_EQUAL(attr.get(0), 0);
         CPPUNIT_ASSERT_EQUAL(attr.get(10), 0);
@@ -194,7 +195,7 @@ TestAttributeArray::testAttributeArray()
         CPPUNIT_ASSERT(!attr.isUniform());
         CPPUNIT_ASSERT_EQUAL(expandedMemUsage, attr.memUsage());
 
-        AttributeArrayI attr2(count);
+        CompressedAttributeArray<int> attr2(count);
         attr2.set(0, 10);
 
         CPPUNIT_ASSERT(attr == attr2);
@@ -229,7 +230,7 @@ TestAttributeArray::testAttributeArray()
         CPPUNIT_ASSERT(!attr.isTransient());
         CPPUNIT_ASSERT(attr.isHidden());
 
-        AttributeArrayI attrB(attr);
+        CompressedAttributeArray<int> attrB(attr);
         CPPUNIT_ASSERT_EQUAL(attr.type(), attrB.type());
         CPPUNIT_ASSERT_EQUAL(attr.size(), attrB.size());
         CPPUNIT_ASSERT_EQUAL(attr.memUsage(), attrB.memUsage());
@@ -242,15 +243,14 @@ TestAttributeArray::testAttributeArray()
         }
     }
 
-    typedef openvdb::tools::FixedPositionAttributeCodec<uint16_t> FixedPositionCodec;
-    typedef openvdb::tools::TypedAttributeArray<double, FixedPositionCodec> AttributeArrayP;
+    typedef FixedPositionAttributeCodec<uint16_t> FixedPositionCodec;
 
     { // Fixed codec range
-        openvdb::tools::AttributeArray::Ptr attr1(new AttributeArrayC(50));
-        openvdb::tools::AttributeArray::Ptr attr2(new AttributeArrayP(50));
+        AttributeArray::Ptr attr1(new CompressedAttributeArray<double, FixedPointCodec>(50));
+        AttributeArray::Ptr attr2(new CompressedAttributeArray<double, FixedPositionCodec>(50));
 
-        AttributeArrayC& fixedPoint = static_cast<AttributeArrayC&>(*attr1);
-        AttributeArrayP& fixedPosition = static_cast<AttributeArrayP&>(*attr2);
+        AttributeArrayD& fixedPoint = static_cast<AttributeArrayD&>(*attr1);
+        AttributeArrayD& fixedPosition = static_cast<AttributeArrayD&>(*attr2);
 
         // fixed point range is 0.0 => 1.0
 
@@ -279,7 +279,7 @@ TestAttributeArray::testAttributeArray()
 
     { // IO
         const size_t count = 50;
-        AttributeArrayI attrA(count);
+        CompressedAttributeArray<int> attrA(count);
 
         for (unsigned i = 0; i < unsigned(count); ++i) {
             attrA.set(i, int(i));
@@ -290,7 +290,7 @@ TestAttributeArray::testAttributeArray()
         std::ostringstream ostr(std::ios_base::binary);
         attrA.write(ostr);
 
-        AttributeArrayI attrB;
+        CompressedAttributeArray<int> attrB;
 
         std::istringstream istr(ostr.str(), std::ios_base::binary);
         attrB.read(istr);
@@ -306,7 +306,7 @@ TestAttributeArray::testAttributeArray()
             CPPUNIT_ASSERT_EQUAL(attrA.get(i), attrB.get(i));
         }
 
-        AttributeArrayI attrC(count, 3);
+        CompressedAttributeArray<int> attrC(count, 3);
         attrC.setTransient(true);
 
         std::ostringstream ostrC(std::ios_base::binary);
@@ -316,11 +316,11 @@ TestAttributeArray::testAttributeArray()
     }
 
     // Registry
-    AttributeArrayI::registerType();
+    CompressedAttributeArray<int>::registerType();
 
-    openvdb::tools::AttributeArray::Ptr attr =
+    AttributeArray::Ptr attr =
         openvdb::tools::AttributeArray::create(
-            AttributeArrayI::attributeType(), 34);
+            CompressedAttributeArray<int>::attributeType(), 34);
 }
 
 
@@ -328,9 +328,9 @@ void
 TestAttributeArray::testAttributeSetDescriptor()
 {
     // Define and register some common attribute types
-    typedef openvdb::tools::TypedAttributeArray<float>  AttributeS;
-    typedef openvdb::tools::TypedAttributeArray<double> AttributeD;
-    typedef openvdb::tools::TypedAttributeArray<int>    AttributeI;
+    typedef openvdb::tools::CompressedAttributeArray<float>  AttributeS;
+    typedef openvdb::tools::CompressedAttributeArray<double> AttributeD;
+    typedef openvdb::tools::CompressedAttributeArray<int>    AttributeI;
 
     AttributeS::registerType();
     AttributeD::registerType();
@@ -388,9 +388,9 @@ TestAttributeArray::testAttributeSet()
     typedef openvdb::tools::AttributeArray AttributeArray;
 
     // Define and register some common attribute types
-    typedef openvdb::tools::TypedAttributeArray<float>          AttributeS;
-    typedef openvdb::tools::TypedAttributeArray<int>            AttributeI;
-    typedef openvdb::tools::TypedAttributeArray<openvdb::Vec3s> AttributeVec3s;
+    typedef openvdb::tools::CompressedAttributeArray<float>          AttributeS;
+    typedef openvdb::tools::CompressedAttributeArray<int>            AttributeI;
+    typedef openvdb::tools::CompressedAttributeArray<openvdb::Vec3s> AttributeVec3s;
 
     AttributeS::registerType();
     AttributeI::registerType();
@@ -640,99 +640,67 @@ TestAttributeArray::testAttributeTypes()
 
     // scalar attributes - no compression
 
-    typedef TypedAttributeArray<bool>                                                         AttributeB;
-    typedef TypedAttributeArray<short>                                                        AttributeSh;
-    typedef TypedAttributeArray<int>                                                          AttributeI;
-    typedef TypedAttributeArray<long>                                                         AttributeL;
-    typedef TypedAttributeArray<half>                                                         AttributeH;
-    typedef TypedAttributeArray<float>                                                        AttributeF;
-    typedef TypedAttributeArray<double>                                                       AttributeD;
+    CompressedAttributeArray<bool>::registerType();
+    CompressedAttributeArray<short>::registerType();
+    CompressedAttributeArray<int>::registerType();
+    CompressedAttributeArray<long>::registerType();
+    CompressedAttributeArray<half>::registerType();
+    CompressedAttributeArray<float>::registerType();
+    CompressedAttributeArray<double>::registerType();
 
     // scalar attributes - truncate compression
 
-    typedef TypedAttributeArray<float, NullAttributeCodec<half> >                             AttributeFH;
-    typedef TypedAttributeArray<double, NullAttributeCodec<half> >                            AttributeDH;
-    typedef TypedAttributeArray<double, NullAttributeCodec<float> >                           AttributeDF;
+    CompressedAttributeArray<float, NullAttributeCodec<half> >::registerType();
+    CompressedAttributeArray<double, NullAttributeCodec<half> >::registerType();
+    CompressedAttributeArray<double, NullAttributeCodec<float> >::registerType();
 
     // vector attributes - no compression
 
-    typedef TypedAttributeArray<Vec3<short> >                                                 AttributeVec3sh;
-    typedef TypedAttributeArray<Vec3i>                                                        AttributeVec3i;
-    typedef TypedAttributeArray<Vec3<long> >                                                  AttributeVec3l;
-    typedef TypedAttributeArray<Vec3<half> >                                                  AttributeVec3h;
-    typedef TypedAttributeArray<Vec3f>                                                        AttributeVec3f;
-    typedef TypedAttributeArray<Vec3d>                                                        AttributeVec3d;
+    CompressedAttributeArray<Vec3<short> >::registerType();
+    CompressedAttributeArray<Vec3i>::registerType();
+    CompressedAttributeArray<Vec3<long> >::registerType();
+    CompressedAttributeArray<Vec3<half> >::registerType();
+    CompressedAttributeArray<Vec3f>::registerType();
+    CompressedAttributeArray<Vec3d>::registerType();
 
     // vector attributes - fixed point compression
 
-    typedef TypedAttributeArray<Vec3<half>, FixedPointAttributeCodec<Vec3<uint8_t> > >        AttributeVec3hFxPt8;
-    typedef TypedAttributeArray<Vec3f, FixedPointAttributeCodec<Vec3<uint8_t> > >             AttributeVec3fFxPt8;
-    typedef TypedAttributeArray<Vec3d, FixedPointAttributeCodec<Vec3<uint8_t> > >             AttributeVec3dFxPt8;
+    CompressedAttributeArray<Vec3<half>, FixedPointAttributeCodec<Vec3<uint8_t> > >::registerType();
+    CompressedAttributeArray<Vec3f, FixedPointAttributeCodec<Vec3<uint8_t> > >::registerType();
+    CompressedAttributeArray<Vec3d, FixedPointAttributeCodec<Vec3<uint8_t> > >::registerType();
 
-    typedef TypedAttributeArray<Vec3<half>, FixedPointAttributeCodec<Vec3<uint16_t> > >       AttributeVec3hFxPt16;
-    typedef TypedAttributeArray<Vec3f, FixedPointAttributeCodec<Vec3<uint16_t> > >            AttributeVec3fFxPt16;
-    typedef TypedAttributeArray<Vec3d, FixedPointAttributeCodec<Vec3<uint16_t> > >            AttributeVec3dFxPt16;
+    CompressedAttributeArray<Vec3<half>, FixedPointAttributeCodec<Vec3<uint16_t> > >::registerType();
+    CompressedAttributeArray<Vec3f, FixedPointAttributeCodec<Vec3<uint16_t> > >::registerType();
+    CompressedAttributeArray<Vec3d, FixedPointAttributeCodec<Vec3<uint16_t> > >::registerType();
 
     // vector attributes - fixed position compression
 
-    typedef TypedAttributeArray<Vec3<half>, FixedPositionAttributeCodec<Vec3<uint8_t> > >     AttributeVec3hFxPs8;
-    typedef TypedAttributeArray<Vec3f, FixedPositionAttributeCodec<Vec3<uint8_t> > >          AttributeVec3fFxPs8;
-    typedef TypedAttributeArray<Vec3d, FixedPositionAttributeCodec<Vec3<uint8_t> > >          AttributeVec3dFxPs8;
+    CompressedAttributeArray<Vec3<half>, FixedPositionAttributeCodec<Vec3<uint8_t> > >::registerType();
+    CompressedAttributeArray<Vec3f, FixedPositionAttributeCodec<Vec3<uint8_t> > >::registerType();
+    CompressedAttributeArray<Vec3d, FixedPositionAttributeCodec<Vec3<uint8_t> > >::registerType();
 
-    typedef TypedAttributeArray<Vec3<half>, FixedPositionAttributeCodec<Vec3<uint16_t> > >    AttributeVec3hFxPs16;
-    typedef TypedAttributeArray<Vec3f, FixedPositionAttributeCodec<Vec3<uint16_t> > >         AttributeVec3fFxPs16;
-    typedef TypedAttributeArray<Vec3d, FixedPositionAttributeCodec<Vec3<uint16_t> > >         AttributeVec3dFxPs16;
+    CompressedAttributeArray<Vec3<half>, FixedPositionAttributeCodec<Vec3<uint16_t> > >::registerType();
+    CompressedAttributeArray<Vec3f, FixedPositionAttributeCodec<Vec3<uint16_t> > >::registerType();
+    CompressedAttributeArray<Vec3d, FixedPositionAttributeCodec<Vec3<uint16_t> > >::registerType();
 
     // vector attributes - unit vector compression
 
-    typedef TypedAttributeArray<Vec3<half>, UnitVecAttributeCodec<uint16_t> >                 AttributeVec3hUVec16;
-    typedef TypedAttributeArray<Vec3f, UnitVecAttributeCodec<uint16_t> >                      AttributeVec3fUVec16;
-    typedef TypedAttributeArray<Vec3d, UnitVecAttributeCodec<uint16_t> >                      AttributeVec3dUVec16;
+    CompressedAttributeArray<Vec3<half>, UnitVecAttributeCodec<uint16_t> >::registerType();
+    CompressedAttributeArray<Vec3f, UnitVecAttributeCodec<uint16_t> >::registerType();
+    CompressedAttributeArray<Vec3d, UnitVecAttributeCodec<uint16_t> >::registerType();
 
     // vector attributes - vector compression
 
-    typedef TypedAttributeArray<Vec3<half>, VecAttributeCodec<half, uint16_t> >               AttributeVec3hVech16;
-    typedef TypedAttributeArray<Vec3f, VecAttributeCodec<float, uint16_t> >                   AttributeVec3fVecf16;
-    typedef TypedAttributeArray<Vec3d, VecAttributeCodec<double, uint16_t> >                  AttributeVec3dVecd16;
-
-    AttributeB::registerType();
-    AttributeSh::registerType();
-    AttributeI::registerType();
-    AttributeL::registerType();
-    AttributeH::registerType();
-    AttributeF::registerType();
-    AttributeD::registerType();
-    AttributeFH::registerType();
-    AttributeDH::registerType();
-    AttributeDF::registerType();
-    AttributeVec3sh::registerType();
-    AttributeVec3i::registerType();
-    AttributeVec3l::registerType();
-    AttributeVec3h::registerType();
-    AttributeVec3f::registerType();
-    AttributeVec3d::registerType();
-    AttributeVec3hFxPt8::registerType();
-    AttributeVec3fFxPt8::registerType();
-    AttributeVec3dFxPt8::registerType();
-    AttributeVec3hFxPt16::registerType();
-    AttributeVec3fFxPt16::registerType();
-    AttributeVec3dFxPt16::registerType();
-    AttributeVec3hFxPs8::registerType();
-    AttributeVec3fFxPs8::registerType();
-    AttributeVec3dFxPs8::registerType();
-    AttributeVec3hFxPs16::registerType();
-    AttributeVec3fFxPs16::registerType();
-    AttributeVec3dFxPs16::registerType();
-    AttributeVec3hUVec16::registerType();
-    AttributeVec3fUVec16::registerType();
-    AttributeVec3dUVec16::registerType();
-    AttributeVec3hVech16::registerType();
-    AttributeVec3fVecf16::registerType();
-    AttributeVec3dVecd16::registerType();
+    CompressedAttributeArray<Vec3<half>, VecAttributeCodec<half, uint16_t> >::registerType();
+    CompressedAttributeArray<Vec3f, VecAttributeCodec<float, uint16_t> >::registerType();
+    CompressedAttributeArray<Vec3d, VecAttributeCodec<double, uint16_t> >::registerType();
 
     // create a Descriptor and AttributeSet
 
     typedef AttributeSet::Descriptor Descriptor;
+
+    typedef CompressedAttributeArray<Vec3f> AttributeVec3f;
+    typedef CompressedAttributeArray<int> AttributeI;
 
     Descriptor::Ptr descr = Descriptor::create(Descriptor::Inserter()
         .add("pos", AttributeVec3f::attributeType())
@@ -743,111 +711,37 @@ TestAttributeArray::testAttributeTypes()
 
     // retrieve the type of the first attribute (pos)
 
-    const std::string& type = descr->type(0);
+    const std::string& valueType = descr->valueType(0);
 
-    // run-time to compile-time dispatch (this is not ideal)
-
-    if (type == AttributeB::attributeType()) {
-        setAttributeValue<AttributeB>(attrSet, 0, 10);
+    if (valueType == TypedAttributeArray<bool>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<bool> >(attrSet, 0, 10);
     }
-    else if (type == AttributeSh::attributeType()) {
-        setAttributeValue<AttributeSh>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<short>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<short> >(attrSet, 0, 10);
     }
-    else if (type == AttributeI::attributeType()) {
-        setAttributeValue<AttributeI>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<int>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<int> >(attrSet, 0, 10);
     }
-    else if (type == AttributeL::attributeType()) {
-        setAttributeValue<AttributeL>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<long>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<long> >(attrSet, 0, 10);
     }
-    else if (type == AttributeH::attributeType()) {
-        setAttributeValue<AttributeH>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<half>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<half> >(attrSet, 0, 10);
     }
-    else if (type == AttributeF::attributeType()) {
-        setAttributeValue<AttributeF>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<float>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<float> >(attrSet, 0, 10);
     }
-    else if (type == AttributeD::attributeType()) {
-        setAttributeValue<AttributeD>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<double>::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<double> >(attrSet, 0, 10);
     }
-    else if (type == AttributeFH::attributeType()) {
-        setAttributeValue<AttributeFH>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<math::Vec3<half> >::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<math::Vec3<half> > >(attrSet, 0, 10);
     }
-    else if (type == AttributeDH::attributeType()) {
-        setAttributeValue<AttributeDH>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<math::Vec3<float> >::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<math::Vec3<float> > >(attrSet, 0, 10);
     }
-    else if (type == AttributeDF::attributeType()) {
-        setAttributeValue<AttributeDF>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3sh::attributeType()) {
-        setAttributeValue<AttributeVec3sh>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3i::attributeType()) {
-        setAttributeValue<AttributeVec3i>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3l::attributeType()) {
-        setAttributeValue<AttributeVec3l>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3h::attributeType()) {
-        setAttributeValue<AttributeVec3h>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3f::attributeType()) {
-        setAttributeValue<AttributeVec3f>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3d::attributeType()) {
-        setAttributeValue<AttributeVec3d>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3hFxPt8::attributeType()) {
-        setAttributeValue<AttributeVec3hFxPt8>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3fFxPt8::attributeType()) {
-        setAttributeValue<AttributeVec3fFxPt8>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3dFxPt8::attributeType()) {
-        setAttributeValue<AttributeVec3dFxPt8>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3hFxPt16::attributeType()) {
-        setAttributeValue<AttributeVec3hFxPt16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3fFxPt16::attributeType()) {
-        setAttributeValue<AttributeVec3fFxPt16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3dFxPt16::attributeType()) {
-        setAttributeValue<AttributeVec3dFxPt16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3hFxPs8::attributeType()) {
-        setAttributeValue<AttributeVec3hFxPs8>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3fFxPs8::attributeType()) {
-        setAttributeValue<AttributeVec3fFxPs8>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3dFxPs8::attributeType()) {
-        setAttributeValue<AttributeVec3dFxPs8>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3hFxPs16::attributeType()) {
-        setAttributeValue<AttributeVec3hFxPs16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3fFxPs16::attributeType()) {
-        setAttributeValue<AttributeVec3fFxPs16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3dFxPs16::attributeType()) {
-        setAttributeValue<AttributeVec3dFxPs16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3hUVec16::attributeType()) {
-        setAttributeValue<AttributeVec3hUVec16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3fUVec16::attributeType()) {
-        setAttributeValue<AttributeVec3fUVec16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3dUVec16::attributeType()) {
-        setAttributeValue<AttributeVec3dUVec16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3hVech16::attributeType()) {
-        setAttributeValue<AttributeVec3hVech16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3fVecf16::attributeType()) {
-        setAttributeValue<AttributeVec3fVecf16>(attrSet, 0, 10);
-    }
-    else if (type == AttributeVec3dVecd16::attributeType()) {
-        setAttributeValue<AttributeVec3dVecd16>(attrSet, 0, 10);
+    else if (valueType == TypedAttributeArray<math::Vec3<double> >::attributeValueType()) {
+        setAttributeValue<TypedAttributeArray<math::Vec3<double> > >(attrSet, 0, 10);
     }
 
     // check value has been correctly set
