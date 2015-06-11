@@ -132,6 +132,12 @@ TestAttributeArray::testAttributeArray()
     typedef TypedAttributeArray<double> AttributeArrayD;
 
     {
+        AttributeArray::Ptr attr(new CompressedAttributeArray<double>(0));
+
+        CPPUNIT_ASSERT_EQUAL(attr->size(), size_t(1));
+    }
+
+    {
         AttributeArray::Ptr attr(new CompressedAttributeArray<double>(50));
 
         CPPUNIT_ASSERT_EQUAL(size_t(50), attr->size());
