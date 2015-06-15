@@ -116,11 +116,11 @@ struct NullAttributeCodec
     typedef StorageType_ StorageType;
     template<typename ValueType> static void decode(const StorageType&, ValueType&);
     template<typename ValueType> static void encode(const ValueType&, StorageType&);
-    template<typename ValueType> static void decode(const void* data, const size_t n, ValueType& val) {
-        decode(reinterpret_cast<const StorageType*>(data)[n], val);
+    template<typename ValueType> static void decode(const void* data, ValueType& val) {
+        decode(*reinterpret_cast<const StorageType*>(data), val);
     }
-    template<typename ValueType> static void encode(const ValueType& val, void* data, size_t n) {
-        encode(val, reinterpret_cast<StorageType*>(data)[n]);
+    template<typename ValueType> static void encode(const ValueType& val, void* data) {
+        encode(val, *reinterpret_cast<StorageType*>(data));
     }
     static const char* name() { return "null"; }
 };
@@ -132,11 +132,11 @@ struct FixedPointAttributeCodec
     typedef IntType StorageType;
     template<typename ValueType> static void decode(const StorageType&, ValueType&);
     template<typename ValueType> static void encode(const ValueType&, StorageType&);
-    template<typename ValueType> static void decode(const void* data, const size_t n, ValueType& val) {
-        decode(reinterpret_cast<const StorageType*>(data)[n], val);
+    template<typename ValueType> static void decode(const void* data, ValueType& val) {
+        decode(*reinterpret_cast<const StorageType*>(data), val);
     }
-    template<typename ValueType> static void encode(const ValueType& val, void* data, size_t n) {
-        encode(val, reinterpret_cast<StorageType*>(data)[n]);
+    template<typename ValueType> static void encode(const ValueType& val, void* data) {
+        encode(val, *reinterpret_cast<StorageType*>(data));
     }
     static const char* name() { return "fxpt"; }
 };
@@ -153,11 +153,11 @@ struct FixedPositionAttributeCodec
     template<typename ValueType> static void encode(const ValueType& v, StorageType& s){
         FixedPointAttributeCodec<IntType>::encode(v + ValueType(0.5), s);
     }
-    template<typename ValueType> static void decode(const void* data, const size_t n, ValueType& val) {
-        decode(reinterpret_cast<const StorageType*>(data)[n], val);
+    template<typename ValueType> static void decode(const void* data, ValueType& val) {
+        decode(*reinterpret_cast<const StorageType*>(data), val);
     }
-    template<typename ValueType> static void encode(const ValueType& val, void* data, size_t n) {
-        encode(val, reinterpret_cast<StorageType*>(data)[n]);
+    template<typename ValueType> static void encode(const ValueType& val, void* data) {
+        encode(val, *reinterpret_cast<StorageType*>(data));
     }
     static const char* name() { return "fxps"; }
 };
@@ -169,11 +169,11 @@ struct UnitVecAttributeCodec
     typedef IntType StorageType;
     template<typename T> static void decode(const StorageType&, math::Vec3<T>&);
     template<typename T> static void encode(const math::Vec3<T>&, StorageType&);
-    template<typename T> static void decode(const void* data, const size_t n, math::Vec3<T>& val) {
-        decode(reinterpret_cast<const StorageType*>(data)[n], val);
+    template<typename T> static void decode(const void* data, math::Vec3<T>& val) {
+        decode(*reinterpret_cast<const StorageType*>(data), val);
     }
-    template<typename T> static void encode(const math::Vec3<T>& val, void* data, size_t n) {
-        encode(val, reinterpret_cast<StorageType*>(data)[n]);
+    template<typename T> static void encode(const math::Vec3<T>& val, void* data) {
+        encode(val, *reinterpret_cast<StorageType*>(data));
     }
     static const char* name() { return "uvec"; }
 };
@@ -187,11 +187,11 @@ struct VecAttributeCodec
     };
     template<typename T> static void decode(const StorageType&, math::Vec3<T>&);
     template<typename T> static void encode(const math::Vec3<T>&, StorageType&);
-    template<typename T> static void decode(const void* data, const size_t n, math::Vec3<T>& val) {
-        decode(reinterpret_cast<const StorageType*>(data)[n], val);
+    template<typename T> static void decode(const void* data, math::Vec3<T>& val) {
+        decode(*reinterpret_cast<const StorageType*>(data), val);
     }
-    template<typename T> static void encode(const math::Vec3<T>& val, void* data, size_t n) {
-        encode(val, reinterpret_cast<StorageType*>(data)[n]);
+    template<typename T> static void encode(const math::Vec3<T>& val, void* data) {
+        encode(val, *reinterpret_cast<StorageType*>(data));
     }
     static const char* name() { return "vec"; }
 };
@@ -318,13 +318,13 @@ public:
 
     typedef ValueType_                  ValueType;
 
-    typedef void (*DecodeFuncPtr)(const void* data, const size_t n, ValueType& val);
-    typedef void (*EncodeFuncPtr)(const ValueType& val, void* data, const size_t n);
+    typedef void (*DecodeFuncPtr)(const void* data, ValueType& val);
+    typedef void (*EncodeFuncPtr)(const ValueType& val, void* data);
 
     //////////
 
     /// Default constructor, always constructs a uniform attribute.
-    explicit TypedAttributeArray(void*, size_t n = 1);
+    TypedAttributeArray(void*, const uint8_t dataSize, const size_t n = 1);
 
     virtual ~TypedAttributeArray() { }
 
@@ -354,6 +354,7 @@ public:
 
 protected:
     void*           mData;
+    uint8_t         mDataSize;
     size_t          mSize;
     bool            mIsUniform;
     tbb::spin_mutex mMutex;
@@ -785,9 +786,10 @@ tbb::atomic<const Name*> TypedAttributeArray<ValueType_>::sValueTypeName;
 
 
 template<typename ValueType_>
-TypedAttributeArray<ValueType_>::TypedAttributeArray(void* data, const size_t n)
+TypedAttributeArray<ValueType_>::TypedAttributeArray(void* data, const uint8_t dataSize, const size_t n)
     : AttributeArray()
     , mData(data)
+    , mDataSize(dataSize)
     , mSize(n)
     , mIsUniform(true)
     , mMutex()
@@ -817,8 +819,12 @@ TypedAttributeArray<ValueType_>::get(Index n) const
     if (this->mCompressedBytes != 0) const_cast<TypedAttributeArray*>(this)->decompress();
     if (mIsUniform) n = 0;
 
+    // use char* to perform arithmetic to increment data pointer
+
+    void* ptr = static_cast<char*>(this->mData) + n * mDataSize;
+
     ValueType val;
-    mDecode(/*in=*/this->mData, n, /*out=*/val);
+    mDecode(/*in=*/ptr, /*out=*/val);
     return val;
 }
 
@@ -828,11 +834,7 @@ template<typename T>
 void
 TypedAttributeArray<ValueType_>::get(Index n, T& val) const
 {
-    if (this->mCompressedBytes != 0) const_cast<TypedAttributeArray*>(this)->decompress();
-    if (mIsUniform) n = 0;
-
-    ValueType tmp;
-    mDecode(/*in=*/this->mData, n, /*out=*/tmp);
+    ValueType tmp = this->get(n);
     val = static_cast<T>(tmp);
 }
 
@@ -844,7 +846,11 @@ TypedAttributeArray<ValueType_>::set(Index n, const ValueType& val)
     if (this->mCompressedBytes != 0) this->decompress();
     if (mIsUniform) this->allocate();
 
-    mEncode(/*in=*/val, /*out=*/this->mData, n);
+    // use char* to perform arithmetic to increment data pointer
+
+    void* ptr = static_cast<char*>(this->mData) + n * mDataSize;
+
+    mEncode(/*in=*/val, /*out=*/ptr);
 }
 
 
@@ -855,10 +861,7 @@ TypedAttributeArray<ValueType_>::set(Index n, const T& val)
 {
     const ValueType tmp = static_cast<ValueType>(val);
 
-    if (this->mCompressedBytes != 0) this->decompress();
-    if (mIsUniform) this->allocate();
-
-    mEncode(/*in=*/tmp, /*out=*/this->mData, n);
+    this->set(n, tmp);
 }
 
 
@@ -887,11 +890,11 @@ tbb::atomic<const Name*> CompressedAttributeArray<ValueType_, Codec_>::sTypeName
 template<typename ValueType_, typename Codec_>
 CompressedAttributeArray<ValueType_, Codec_>::CompressedAttributeArray(
     size_t n, const ValueType& uniformValue)
-    : TypedAttributeArray<ValueType_>(new StorageType[1], n)
+    : TypedAttributeArray<ValueType_>(new StorageType[1], uint8_t(sizeof(StorageType)), n)
 {
     this->mEncode = Codec::encode;
     this->mDecode = Codec::decode;
-    Codec::encode(uniformValue, this->mData, 0);
+    Codec::encode(uniformValue, this->mData);
 }
 
 
@@ -901,6 +904,7 @@ CompressedAttributeArray<ValueType_, Codec_>::CompressedAttributeArray(const Com
 {
     this->mEncode = Codec::encode;
     this->mDecode = Codec::decode;
+    this->mDataSize = rhs.mDataSize;
 
     if (this->mIsUniform) {
         this->mData = new StorageType[1];
@@ -1069,7 +1073,7 @@ CompressedAttributeArray<ValueType_, Codec_>::collapse(const ValueType& uniformV
         this->mData = new StorageType[1];
         this->mIsUniform = true;
     }
-    Codec::encode(uniformValue, this->mData, 0);
+    Codec::encode(uniformValue, this->mData);
 }
 
 
