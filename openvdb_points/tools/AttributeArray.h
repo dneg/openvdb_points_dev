@@ -77,9 +77,11 @@ template <typename IntegerT, typename FloatT>
 inline IntegerT
 floatingPointToFixedPoint(const FloatT s)
 {
+    const FloatT MinF = FloatT(std::numeric_limits<IntegerT>::min());
+    const FloatT RangeF = FloatT(std::numeric_limits<IntegerT>::max()) - MinF;
     if (FloatT(0.0) > s) return std::numeric_limits<IntegerT>::min();
     else if (FloatT(1.0) <= s) return std::numeric_limits<IntegerT>::max();
-    return IntegerT(std::floor(s * FloatT(std::numeric_limits<IntegerT>::max())));
+    return IntegerT(std::floor((s * RangeF) + MinF));
 }
 
 
@@ -87,7 +89,9 @@ template <typename FloatT, typename IntegerT>
 inline FloatT
 fixedPointToFloatingPoint(const IntegerT s)
 {
-    return FloatT(s) / FloatT((std::numeric_limits<IntegerT>::max()));
+    const FloatT MinF = FloatT(std::numeric_limits<IntegerT>::min());
+    const FloatT RangeF = FloatT(std::numeric_limits<IntegerT>::max()) - MinF;
+    return (FloatT(s) - MinF) / RangeF;
 }
 
 
