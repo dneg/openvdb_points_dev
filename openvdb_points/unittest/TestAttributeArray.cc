@@ -46,14 +46,24 @@ class TestAttributeArray: public CppUnit::TestCase
 public:
     CPPUNIT_TEST_SUITE(TestAttributeArray);
     CPPUNIT_TEST(testFixedPointConversion);
+    CPPUNIT_TEST(testFixedPointUsesEntireRangeForSignedIntegerTypes);
+    CPPUNIT_TEST(testFixedPointUsesEntireRangeForUnsignedIntegerTypes);
     CPPUNIT_TEST(testAttributeArray);
     CPPUNIT_TEST(testAttributeHandle);
 
     CPPUNIT_TEST_SUITE_END();
 
     void testFixedPointConversion();
+    void testFixedPointUsesEntireRangeForSignedIntegerTypes();
+    void testFixedPointUsesEntireRangeForUnsignedIntegerTypes();
     void testAttributeArray();
     void testAttributeHandle();
+
+private:
+
+    template <class IntegerT>
+    void ensureFixedPointUsesEntireIntegerRange();
+
 }; // class TestPointDataGrid
 
 CPPUNIT_TEST_SUITE_REGISTRATION(TestAttributeArray);
@@ -103,6 +113,36 @@ TestAttributeArray::testFixedPointConversion()
 
     CPPUNIT_ASSERT_DOUBLES_EQUAL(value, newValue, /*tolerance=*/1e-6);
 }
+
+
+template <class IntegerT>
+void TestAttributeArray::ensureFixedPointUsesEntireIntegerRange()
+{
+    IntegerT minimumFixedPoint = openvdb::tools::floatingPointToFixedPoint<IntegerT,float>(0.0f);
+    CPPUNIT_ASSERT_EQUAL(std::numeric_limits<IntegerT>::min(), minimumFixedPoint);
+
+    IntegerT maximumFixedPoint = openvdb::tools::floatingPointToFixedPoint<IntegerT,float>(1.0f);
+    CPPUNIT_ASSERT_EQUAL(std::numeric_limits<IntegerT>::max(), maximumFixedPoint);
+}
+
+
+void TestAttributeArray::testFixedPointUsesEntireRangeForSignedIntegerTypes()
+{
+    ensureFixedPointUsesEntireIntegerRange<int8_t>();
+    ensureFixedPointUsesEntireIntegerRange<int16_t>();
+    ensureFixedPointUsesEntireIntegerRange<int32_t>();
+    ensureFixedPointUsesEntireIntegerRange<int64_t>();
+}
+
+
+void TestAttributeArray::testFixedPointUsesEntireRangeForUnsignedIntegerTypes()
+{
+    ensureFixedPointUsesEntireIntegerRange<uint8_t>();
+    ensureFixedPointUsesEntireIntegerRange<uint16_t>();
+    ensureFixedPointUsesEntireIntegerRange<uint32_t>();
+    ensureFixedPointUsesEntireIntegerRange<uint64_t>();
+}
+
 
 void
 TestAttributeArray::testAttributeArray()
