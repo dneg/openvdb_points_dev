@@ -210,8 +210,9 @@ struct PopulatePositionAttributeOp {
 
             if (!pointIndexLeaf)    continue;
 
-            AttributeWriteHandle<ValueType>* attributeWriteHandle =
-                leaf->template attributeWriteHandle<ValueType>("P");
+            std::auto_ptr<AttributeWriteHandle<ValueType> > attributeWriteHandle(
+                leaf->template attributeWriteHandle<ValueType>("P")
+            );
 
             Index64 index = 0;
 
@@ -273,8 +274,9 @@ struct PopulateAttributeOp {
 
             if (!pointIndexLeaf)    continue;
 
-            AttributeWriteHandle<ValueType>* attributeWriteHandle =
-                leaf->template attributeWriteHandle<ValueType>(mAttributeName);
+            std::auto_ptr<AttributeWriteHandle<ValueType> > attributeWriteHandle(
+                leaf->template attributeWriteHandle<ValueType>(mAttributeName)
+            );
 
             Index64 index = 0;
 
