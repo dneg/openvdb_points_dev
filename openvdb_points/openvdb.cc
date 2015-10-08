@@ -68,6 +68,7 @@ initialize()
     TypedAttributeArray<Vec3<half> >::registerType();
     TypedAttributeArray<Vec3<float> >::registerType();
     TypedAttributeArray<Vec3<double> >::registerType();
+    TypedAttributeArray<Vec3<int16_t> >::registerType();
 
     // truncate compression
 
