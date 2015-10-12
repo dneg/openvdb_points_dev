@@ -539,6 +539,27 @@ TestPointDataLeaf::testAttributes()
     CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeS>(/*pos=*/2));
     CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeS>("test"));
 
+    // test underlying attributeArray can be accessed by name and index, and that their types are as expected.
+    const LeafType* constLeaf = &leaf;
+
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray(/*pos*/0).type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray("density").type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray(/*pos*/1).type(), AttributeI::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray("id").type(), AttributeI::attributeType()));
+
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray(/*pos*/0).type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray("density").type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray(/*pos*/1).type(), AttributeI::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray("id").type(), AttributeI::attributeType()));
+
+    // check invalid pos or name throws
+
+    CPPUNIT_ASSERT_THROW(leaf.attributeArray(/*pos=*/3), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(leaf.attributeArray("not_there"), openvdb::LookupError);
+
+    CPPUNIT_ASSERT_THROW(constLeaf->attributeArray(/*pos=*/3), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(constLeaf->attributeArray("not_there"), openvdb::LookupError);
+
     // test leaf can be successfully cast to TypedAttributeArray and check types
 
     CPPUNIT_ASSERT(matchingNamePairs(leaf.typedAttributeArray<AttributeS>(/*pos=*/0).type(),
@@ -549,8 +570,6 @@ TestPointDataLeaf::testAttributes()
                          AttributeI::attributeType()));
     CPPUNIT_ASSERT(matchingNamePairs(leaf.typedAttributeArray<AttributeI>("id").type(),
                          AttributeI::attributeType()));
-
-    const LeafType* constLeaf = &leaf;
 
     CPPUNIT_ASSERT(matchingNamePairs(constLeaf->typedAttributeArray<AttributeS>(/*pos=*/0).type(),
                          AttributeS::attributeType()));
