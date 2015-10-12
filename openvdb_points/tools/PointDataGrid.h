@@ -328,6 +328,32 @@ public:
         mAttributeSet->appendAttribute(attribute, expected, replacement);
     }
 
+    AttributeArray& attributeArray(const size_t pos)
+    {
+        if (pos >= mAttributeSet->size())             OPENVDB_THROW(LookupError, "Attribute Out Of Range");
+        return *mAttributeSet->get(pos);
+    }
+
+    AttributeArray& attributeArray(const Name& attributeName)
+    {
+        const size_t pos = mAttributeSet->find(attributeName);
+        if (pos == AttributeSet::INVALID_POS)         OPENVDB_THROW(LookupError, "Attribute Not Found");
+        return *mAttributeSet->get(pos);
+    }
+
+    const AttributeArray& attributeArray(const size_t pos) const
+    {
+        if (pos >= mAttributeSet->size())             OPENVDB_THROW(LookupError, "Attribute Out Of Range");
+        return *mAttributeSet->get(pos);
+    }
+
+    const AttributeArray& attributeArray(const Name& attributeName) const
+    {
+        const size_t pos = mAttributeSet->find(attributeName);
+        if (pos == AttributeSet::INVALID_POS)         OPENVDB_THROW(LookupError, "Attribute Not Found");
+        return *mAttributeSet->get(pos);
+    }
+
     template <typename AttributeType>
     typename AttributeWriteHandle<AttributeType>::Ptr attributeWriteHandle(const size_t pos)
     {
