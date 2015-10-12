@@ -258,6 +258,13 @@ public:
         : BaseLeaf(other, zeroVal<T>(), TopologyCopy())
         , mAttributeSet(new AttributeSet) { }
 
+    // Copy-construct from a LeafNode with the same configuration but a different ValueType.
+    // Used for topology copies - explicitly sets the on and off value (background) to zeroVal
+    template <typename ValueType>
+    PointDataLeafNode(const tree::LeafNode<ValueType, Log2Dim>& other, const T& offValue, const T& onValue, TopologyCopy)
+        : BaseLeaf(other, zeroVal<T>(), zeroVal<T>(), TopologyCopy())
+        , mAttributeSet(new AttributeSet) { }
+
 #ifndef OPENVDB_2_ABI_COMPATIBLE
     PointDataLeafNode(PartialCreate, const Coord& coords,
         const T& value = zeroVal<T>(), bool active = false)
@@ -328,17 +335,17 @@ public:
     }
 
     template <typename AttributeType>
-    AttributeWriteHandle<AttributeType>* attributeWriteHandle(const size_t pos)
+    typename AttributeWriteHandle<AttributeType>::Ptr attributeWriteHandle(const size_t pos)
     {
         if (pos >= mAttributeSet->size())             OPENVDB_THROW(LookupError, "Attribute Out Of Range");
 
         AttributeArray* array = mAttributeSet->get(pos);
 
-        return new AttributeWriteHandle<AttributeType>(*array);
+        return AttributeWriteHandle<AttributeType>::create(*array);
     }
 
     template <typename AttributeType>
-    AttributeWriteHandle<AttributeType>* attributeWriteHandle(const Name& attributeName)
+    typename AttributeWriteHandle<AttributeType>::Ptr attributeWriteHandle(const Name& attributeName)
     {
         const size_t pos = mAttributeSet->find(attributeName);
 
@@ -346,21 +353,21 @@ public:
 
         AttributeArray* array = mAttributeSet->get(pos);
 
-        return new AttributeWriteHandle<AttributeType>(*array);
+        return AttributeWriteHandle<AttributeType>::create(*array);
     }
 
     template <typename AttributeType>
-    AttributeHandle<AttributeType>* attributeHandle(const size_t pos) const
+    typename AttributeHandle<AttributeType>::Ptr attributeHandle(const size_t pos) const
     {
         if (pos >= mAttributeSet->size())             OPENVDB_THROW(LookupError, "Attribute Out Of Range");
 
         AttributeArray* array = mAttributeSet->get(pos);
 
-        return new AttributeHandle<AttributeType>(*array);
+        return AttributeHandle<AttributeType>::create(*array);
     }
 
     template <typename AttributeType>
-    AttributeHandle<AttributeType>* attributeHandle(const Name& attributeName) const
+    typename AttributeHandle<AttributeType>::Ptr attributeHandle(const Name& attributeName) const
     {
         const size_t pos = mAttributeSet->find(attributeName);
 
@@ -368,7 +375,7 @@ public:
 
         AttributeArray* array = mAttributeSet->get(pos);
 
-        return new AttributeHandle<AttributeType>(*array);
+        return AttributeHandle<AttributeType>::create(*array);
     }
 
     template <typename TypedAttributeType>
