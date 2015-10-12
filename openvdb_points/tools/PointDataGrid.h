@@ -321,12 +321,6 @@ public:
         return hasAttribute<TypedAttributeArrayType>(pos);
     }
 
-    /// @brief Copy attribute values for a target index @a n from another @a attributeSet for index @a source
-    void copyAttributeValues(const Index n, const AttributeSet& attributeSet, const Index source)
-    {
-        mAttributeSet->copyAttributeValues(n, attributeSet, source);
-    }
-
     /// @brief Append an attribute to the leaf.
     void appendAttribute(const AttributeSet::Util::NameAndType& attribute,
                          const Descriptor& expected, Descriptor::Ptr& replacement)
