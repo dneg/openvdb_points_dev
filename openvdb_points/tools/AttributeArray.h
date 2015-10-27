@@ -150,12 +150,6 @@ struct UnitVecAttributeCodec
 
 ////////////////////////////////////////
 
-template <typename T>
-class AttributeHandle;
-
-template <typename T>
-class AttributeWriteHandle;
-
 /// Base class for storing attribute data
 class AttributeArray
 {
