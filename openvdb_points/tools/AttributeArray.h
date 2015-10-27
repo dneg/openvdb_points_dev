@@ -150,6 +150,11 @@ struct UnitVecAttributeCodec
 
 ////////////////////////////////////////
 
+template <typename T>
+class AttributeHandle;
+
+template <typename T>
+class AttributeWriteHandle;
 
 /// Base class for storing attribute data
 class AttributeArray
@@ -318,6 +323,12 @@ public:
     /// Return a new attribute array of the given length @a n with uniform value zero.
     static Ptr create(size_t n);
 
+    /// Down-cast a typeless @a attributeArray to a strongly typed attribute array
+    static TypedAttributeArray& cast(AttributeArray& attributeArray);
+
+    /// Down-cast a typeless @a attributeArray to a strongly typed attribute array
+    static const TypedAttributeArray& cast(const AttributeArray& attributeArray);
+
     /// Return the name of this attribute's type (includes codec)
     static const NamePair& attributeType();
     /// Return the name of this attribute's type.
@@ -378,7 +389,6 @@ public:
     virtual void read(std::istream& is);
     /// Write attribute data to a stream.
     virtual void write(std::ostream& os) const;
-
 
 protected:
     virtual AccessorBasePtr getAccessor() const;
@@ -642,6 +652,21 @@ TypedAttributeArray<ValueType_, Codec_>::create(size_t n)
     return Ptr(new TypedAttributeArray(n));
 }
 
+template<typename ValueType_, typename Codec_>
+inline TypedAttributeArray<ValueType_, Codec_>&
+TypedAttributeArray<ValueType_, Codec_>::cast(AttributeArray& attributeArray)
+{
+    if (!attributeArray.isType<TypedAttributeArray>())     OPENVDB_THROW(TypeError, "Invalid Attribute Type");
+    return static_cast<TypedAttributeArray&>(attributeArray);
+}
+
+template<typename ValueType_, typename Codec_>
+inline const TypedAttributeArray<ValueType_, Codec_>&
+TypedAttributeArray<ValueType_, Codec_>::cast(const AttributeArray& attributeArray)
+{
+    if (!attributeArray.isType<TypedAttributeArray>())     OPENVDB_THROW(TypeError, "Invalid Attribute Type");
+    return static_cast<const TypedAttributeArray&>(attributeArray);
+}
 
 template<typename ValueType_, typename Codec_>
 AttributeArray::Ptr

@@ -47,12 +47,14 @@ public:
     CPPUNIT_TEST_SUITE(TestAttributeArray);
     CPPUNIT_TEST(testFixedPointConversion);
     CPPUNIT_TEST(testAttributeArray);
+    CPPUNIT_TEST(testAttributeArrayCasting);
     CPPUNIT_TEST(testAttributeHandle);
 
     CPPUNIT_TEST_SUITE_END();
 
     void testFixedPointConversion();
     void testAttributeArray();
+    void testAttributeArrayCasting();
     void testAttributeHandle();
 }; // class TestPointDataGrid
 
@@ -293,6 +295,22 @@ TestAttributeArray::testAttributeArray()
     openvdb::tools::AttributeArray::Ptr attr =
         openvdb::tools::AttributeArray::create(
             AttributeArrayI::attributeType(), 34);
+}
+
+
+void
+TestAttributeArray::testAttributeArrayCasting()
+{
+    using namespace openvdb;
+    using namespace openvdb::tools;
+
+    AttributeArray::Ptr array = TypedAttributeArray<float>::create(0);
+    CPPUNIT_ASSERT_NO_THROW(TypedAttributeArray<float>::cast(*array));
+    CPPUNIT_ASSERT_THROW(TypedAttributeArray<int>::cast(*array), TypeError);
+
+    AttributeArray::ConstPtr constArray = array;
+    CPPUNIT_ASSERT_NO_THROW(TypedAttributeArray<float>::cast(*constArray));
+    CPPUNIT_ASSERT_THROW(TypedAttributeArray<int>::cast(*constArray), TypeError);
 }
 
 
