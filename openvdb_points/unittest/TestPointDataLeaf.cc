@@ -524,58 +524,75 @@ TestPointDataLeaf::testAttributes()
     CPPUNIT_ASSERT_EQUAL(array0->size(), size_t(1));
     CPPUNIT_ASSERT_EQUAL(array1->size(), size_t(1));
 
-    // test leaf returns expected result for hasAttribute()
+    // test leaf returns expected result for hasAttribute() and hasTypedAttribute<T>()
 
-    CPPUNIT_ASSERT(leaf.hasAttribute<AttributeS>(/*pos=*/0));
-    CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeI>(/*pos=*/0));
-    CPPUNIT_ASSERT(leaf.hasAttribute<AttributeS>("density"));
-    CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeI>("density"));
+    CPPUNIT_ASSERT(leaf.hasAttribute(/*pos*/0));
+    CPPUNIT_ASSERT(leaf.hasTypedAttribute<AttributeS>(/*pos=*/0));
+    CPPUNIT_ASSERT(!leaf.hasTypedAttribute<AttributeI>(/*pos=*/0));
+    CPPUNIT_ASSERT(leaf.hasAttribute("density"));
+    CPPUNIT_ASSERT(leaf.hasTypedAttribute<AttributeS>("density"));
+    CPPUNIT_ASSERT(!leaf.hasTypedAttribute<AttributeI>("density"));
 
-    CPPUNIT_ASSERT(leaf.hasAttribute<AttributeI>(/*pos=*/1));
-    CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeS>(/*pos=*/1));
-    CPPUNIT_ASSERT(leaf.hasAttribute<AttributeI>("id"));
-    CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeS>("id"));
+    CPPUNIT_ASSERT(leaf.hasAttribute(/*pos*/1));
+    CPPUNIT_ASSERT(leaf.hasTypedAttribute<AttributeI>(/*pos=*/1));
+    CPPUNIT_ASSERT(!leaf.hasTypedAttribute<AttributeS>(/*pos=*/1));
+    CPPUNIT_ASSERT(leaf.hasAttribute("id"));
+    CPPUNIT_ASSERT(leaf.hasTypedAttribute<AttributeI>("id"));
+    CPPUNIT_ASSERT(!leaf.hasTypedAttribute<AttributeS>("id"));
 
-    CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeS>(/*pos=*/2));
-    CPPUNIT_ASSERT(!leaf.hasAttribute<AttributeS>("test"));
+    CPPUNIT_ASSERT(!leaf.hasAttribute(/*pos*/2));
+    CPPUNIT_ASSERT(!leaf.hasTypedAttribute<AttributeS>(/*pos=*/2));
+    CPPUNIT_ASSERT(!leaf.hasAttribute("test"));
+    CPPUNIT_ASSERT(!leaf.hasTypedAttribute<AttributeS>("test"));
+
+    // test underlying attributeArray can be accessed by name and index, and that their types are as expected.
+    const LeafType* constLeaf = &leaf;
+
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray(/*pos*/0).type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray("density").type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray(/*pos*/1).type(), AttributeI::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray("id").type(), AttributeI::attributeType()));
+
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray(/*pos*/0).type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray("density").type(), AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray(/*pos*/1).type(), AttributeI::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray("id").type(), AttributeI::attributeType()));
+
+    // check invalid pos or name throws
+
+    CPPUNIT_ASSERT_THROW(leaf.attributeArray(/*pos=*/3), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(leaf.attributeArray("not_there"), openvdb::LookupError);
+
+    CPPUNIT_ASSERT_THROW(constLeaf->attributeArray(/*pos=*/3), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(constLeaf->attributeArray("not_there"), openvdb::LookupError);
 
     // test leaf can be successfully cast to TypedAttributeArray and check types
 
-    CPPUNIT_ASSERT(matchingNamePairs(leaf.typedAttributeArray<AttributeS>(/*pos=*/0).type(),
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray(/*pos=*/0).type(),
                          AttributeS::attributeType()));
-    CPPUNIT_ASSERT(matchingNamePairs(leaf.typedAttributeArray<AttributeS>("density").type(),
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray("density").type(),
                          AttributeS::attributeType()));
-    CPPUNIT_ASSERT(matchingNamePairs(leaf.typedAttributeArray<AttributeI>(/*pos=*/1).type(),
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray(/*pos=*/1).type(),
                          AttributeI::attributeType()));
-    CPPUNIT_ASSERT(matchingNamePairs(leaf.typedAttributeArray<AttributeI>("id").type(),
-                         AttributeI::attributeType()));
-
-    const LeafType* constLeaf = &leaf;
-
-    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->typedAttributeArray<AttributeS>(/*pos=*/0).type(),
-                         AttributeS::attributeType()));
-    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->typedAttributeArray<AttributeS>("density").type(),
-                         AttributeS::attributeType()));
-    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->typedAttributeArray<AttributeI>(/*pos=*/1).type(),
-                         AttributeI::attributeType()));
-    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->typedAttributeArray<AttributeI>("id").type(),
+    CPPUNIT_ASSERT(matchingNamePairs(leaf.attributeArray("id").type(),
                          AttributeI::attributeType()));
 
-    // check invalid type, pos or name throws
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray(/*pos=*/0).type(),
+                         AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray("density").type(),
+                         AttributeS::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray(/*pos=*/1).type(),
+                         AttributeI::attributeType()));
+    CPPUNIT_ASSERT(matchingNamePairs(constLeaf->attributeArray("id").type(),
+                         AttributeI::attributeType()));
 
-    CPPUNIT_ASSERT_THROW(leaf.typedAttributeArray<AttributeI>(/*pos=*/0), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(leaf.typedAttributeArray<AttributeI>("density"), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(leaf.typedAttributeArray<AttributeS>(/*pos=*/1), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(leaf.typedAttributeArray<AttributeS>("id"), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(leaf.typedAttributeArray<AttributeS>(/*pos=*/2), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(leaf.typedAttributeArray<AttributeS>("test"), openvdb::LookupError);
+    // check invalid pos or name throws
 
-    CPPUNIT_ASSERT_THROW(constLeaf->typedAttributeArray<AttributeI>(/*pos=*/0), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(constLeaf->typedAttributeArray<AttributeI>("density"), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(constLeaf->typedAttributeArray<AttributeS>(/*pos=*/1), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(constLeaf->typedAttributeArray<AttributeS>("id"), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(constLeaf->typedAttributeArray<AttributeS>(/*pos=*/2), openvdb::LookupError);
-    CPPUNIT_ASSERT_THROW(constLeaf->typedAttributeArray<AttributeS>("test"), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(leaf.attributeArray(/*pos=*/2), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(leaf.attributeArray("test"), openvdb::LookupError);
+
+    CPPUNIT_ASSERT_THROW(constLeaf->attributeArray(/*pos=*/2), openvdb::LookupError);
+    CPPUNIT_ASSERT_THROW(constLeaf->attributeArray("test"), openvdb::LookupError);
 
     // check memory usage = attribute set + base leaf
 
@@ -706,7 +723,7 @@ TestPointDataLeaf::testEquivalence()
 
     // manually change some values in the density array
 
-    TypedAttributeArray<float>& attr = leaf.typedAttributeArray<AttributeS>("density");
+    TypedAttributeArray<float>& attr = TypedAttributeArray<float>::cast(leaf.attributeArray("density"));
 
     attr.set(0, 5.0f);
     attr.set(50, 2.0f);
@@ -784,7 +801,7 @@ TestPointDataLeaf::testIO()
 
     // manually change some values in the density array
 
-    TypedAttributeArray<float>& attr = leaf.typedAttributeArray<AttributeS>("density");
+    TypedAttributeArray<float>& attr = TypedAttributeArray<float>::cast(leaf.attributeArray("density"));
 
     attr.set(0, 5.0f);
     attr.set(50, 2.0f);
