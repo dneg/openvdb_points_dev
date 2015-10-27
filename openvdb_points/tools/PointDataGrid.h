@@ -344,6 +344,22 @@ public:
         mAttributeSet->appendAttribute(attribute, expected, replacement);
     }
 
+    /// @brief Drop attributes with @a pos indices.
+    /// Requires the current descriptor to match @a expected
+    /// On drop, current descriptor is replaced with @a replacement
+    void dropAttributes(const std::vector<size_t>& pos,
+                        const Descriptor& expected, Descriptor::Ptr& replacement)
+    {
+        mAttributeSet->dropAttributes(pos, expected, replacement);
+    }
+
+    /// @brief Reorder attribute set based on a decriptor which contains
+    /// the same attributes in a different order
+    void reorderAttributes(const Descriptor::Ptr& replacement)
+    {
+        mAttributeSet->reorderAttributes(replacement);
+    }
+
     AttributeArray& attributeArray(const size_t pos)
     {
         if (pos >= mAttributeSet->size())             OPENVDB_THROW(LookupError, "Attribute Out Of Range");

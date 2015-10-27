@@ -27,37 +27,68 @@
 // LIABILITY FOR ALL CLAIMS REGARDLESS OF THEIR BASIS EXCEED US$250.00.
 //
 ///////////////////////////////////////////////////////////////////////////
+//
+/// @file ResourceData_OpenVDBPoints.h
+///
+/// @author Dan Bailey
+///
+/// @brief  A Resource to store OpenVDB Points data
+///
 
-#ifndef OPENVDB_POINTS_TYPES_HAS_BEEN_INCLUDED
-#define OPENVDB_POINTS_TYPES_HAS_BEEN_INCLUDED
+#ifndef OPENVDB_CLARISSE_RESOURCEDATA_OPENVDBPOINTS_HAS_BEEN_INCLUDED
+#define OPENVDB_CLARISSE_RESOURCEDATA_OPENVDBPOINTS_HAS_BEEN_INCLUDED
 
-#include <openvdb/version.h>
-#include <openvdb/Platform.h>
-#include <openvdb/Types.h>
-#include <OpenEXR/half.h>
+#include <resource_data.h>
 
-namespace openvdb {
-OPENVDB_USE_VERSION_NAMESPACE
-namespace OPENVDB_VERSION_NAME {
-
-// add some extra typeNameAsString specializations
-
-template<> inline const char* typeNameAsString<half>()                   { return "half"; }
-template<> inline const char* typeNameAsString<int16_t>()                { return "int16"; }
-template<> inline const char* typeNameAsString<uint16_t>()               { return "uint16"; }
-template<> inline const char* typeNameAsString<math::Vec3<half> >()      { return "vec3h"; }
-template<> inline const char* typeNameAsString<math::Vec3<uint8_t> >()   { return "vec3u8"; }
-template<> inline const char* typeNameAsString<math::Vec3<uint16_t> >()  { return "vec3u16"; }
+#include <openvdb/openvdb.h>
+#include <openvdb_points/openvdb.h>
+#include <openvdb_points/tools/PointDataGrid.h>
 
 
 ////////////////////////////////////////
 
 
-} // namespace OPENVDB_VERSION_NAME
-} // namespace openvdb
+namespace openvdb_points
+{
 
-#endif // OPENVDB_POINTS_TYPES_HAS_BEEN_INCLUDED
+openvdb::tools::PointDataGrid::Ptr
+load(   const std::string& filename,
+        const std::string& gridname,
+        const bool doPrune = true);
 
-// Copyright (c) 2015 Double Negative Visual Effects
-// All rights reserved. This software is distributed under the
-// Mozilla Public License 2.0 ( http://www.mozilla.org/MPL/2.0/ )
+void localise(openvdb::tools::PointDataGrid::Ptr& grid);
+
+} // namespace openvdb_points
+
+
+////////////////////////////////////////
+
+
+class ResourceData_OpenVDBPoints : public ResourceData
+{
+public:
+    typedef openvdb::tools::PointDataTree::LeafNodeType PointDataLeaf;
+
+    static ResourceData_OpenVDBPoints* create(const openvdb::tools::PointDataGrid::Ptr& grid);
+
+    ResourceData_OpenVDBPoints(const openvdb::tools::PointDataGrid::Ptr& grid);
+
+    const openvdb::tools::PointDataGrid::Ptr grid() const;
+
+    const PointDataLeaf* leaf(const unsigned int id) const;
+
+    std::string attribute_type(const std::string& name) const;
+
+    void *create_thread_data() const;
+    void destroy_thread_data(void *data) const;
+
+    size_t get_memory_size() const;
+
+private:
+    const openvdb::tools::PointDataGrid::Ptr m_grid;
+    const openvdb::tools::AttributeSet::Descriptor::Ptr m_descriptor;
+
+    std::vector<PointDataLeaf*> m_leaves;
+}; // ResourceData_OpenVDBPoints
+
+#endif // OPENVDB_CLARISSE_RESOURCEDATA_OPENVDBPOINTS_HAS_BEEN_INCLUDED
