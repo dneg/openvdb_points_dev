@@ -408,16 +408,27 @@ public:
 
     const AttributeArray& attributeArray(const size_t pos) const
     {
+        return constAttributeArray(pos);
+    }
+
+    const AttributeArray& attributeArray(const Name& attributeName) const
+    {
+        return constAttributeArray(attributeName);
+    }
+
+    const AttributeArray& constAttributeArray(const size_t pos) const
+    {
         if (pos >= mAttributeSet->size())             OPENVDB_THROW(LookupError, "Attribute Out Of Range - " << pos);
         return *mAttributeSet->get(pos);
     }
 
-    const AttributeArray& attributeArray(const Name& attributeName) const
+    const AttributeArray& constAttributeArray(const Name& attributeName) const
     {
         const size_t pos = mAttributeSet->find(attributeName);
         if (pos == AttributeSet::INVALID_POS)         OPENVDB_THROW(LookupError, "Attribute Not Found - " << attributeName);
         return *mAttributeSet->get(pos);
     }
+
 
     ValueTypePair pointIndex(const unsigned index) const
     {
