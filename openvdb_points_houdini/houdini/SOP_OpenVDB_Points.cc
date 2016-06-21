@@ -467,16 +467,17 @@ convertPointDataGridToHoudini(GU_Detail& detail, hvdb::VdbPrimCIterator& vdbIt,
         const bool hasPosition = descriptor.find("P") != AttributeSet::INVALID_POS;
         if (!hasPosition)   continue;
 
-        // obtain cumulative point offsets and total points
+        // obtain cumulative (but non-global) point offsets and total points
 
         std::vector<Index64> pointOffsets;
         Index64 total = getPointOffsets(pointOffsets, tree, includeGroups, excludeGroups);
 
-        geo.appendPointBlock(total);
+        // a block's global offset is needed to transform its point offsets to global offsets
+        Index64 globalOffset = geo.appendPointBlock(total);
 
         hvdbp::HoudiniWriteAttribute<Vec3f> positionAttribute(*geo.getP());
-        convertPointDataGridPosition(positionAttribute, grid, pointOffsets,
-                                     includeGroups, excludeGroups);
+        convertPointDataGridPosition(positionAttribute, grid, globalOffset,
+                                     pointOffsets, includeGroups, excludeGroups);
 
         // add other point attributes to the hdk detail
         const AttributeSet::Descriptor::NameToPosMap& nameToPosMap = descriptor.map();
@@ -505,43 +506,43 @@ convertPointDataGridToHoudini(GU_Detail& detail, hvdb::VdbPrimCIterator& vdbIt,
 
             if (type == "bool") {
                 hvdbp::HoudiniWriteAttribute<bool> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "int16") {
                 hvdbp::HoudiniWriteAttribute<int16_t> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "int32") {
                 hvdbp::HoudiniWriteAttribute<int32_t> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "int64") {
                 hvdbp::HoudiniWriteAttribute<int64_t> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "half") {
                 hvdbp::HoudiniWriteAttribute<half> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "float") {
                 hvdbp::HoudiniWriteAttribute<float> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "double") {
                 hvdbp::HoudiniWriteAttribute<double> attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "vec3h") {
                 hvdbp::HoudiniWriteAttribute<Vec3<half> > attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "vec3s") {
                 hvdbp::HoudiniWriteAttribute<Vec3<float> > attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else if (type == "vec3d") {
                 hvdbp::HoudiniWriteAttribute<Vec3<double> > attribute(*attributeRef.getAttribute());
-                convertPointDataGridAttribute(attribute, tree, pointOffsets, index, includeGroups, excludeGroups);
+                convertPointDataGridAttribute(attribute, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
             }
             else {
                 throw std::runtime_error("Unknown Attribute Type for Conversion: " + type);
@@ -563,7 +564,7 @@ convertPointDataGridToHoudini(GU_Detail& detail, hvdb::VdbPrimCIterator& vdbIt,
             const AttributeSet::Descriptor::GroupIndex index = attributeSet.groupIndex(name);
 
             hvdbp::HoudiniGroup group(*pointGroup);
-            convertPointDataGridGroup(group, tree, pointOffsets, index, includeGroups, excludeGroups);
+            convertPointDataGridGroup(group, tree, globalOffset, pointOffsets, index, includeGroups, excludeGroups);
         }
 
         detail.merge(geo);

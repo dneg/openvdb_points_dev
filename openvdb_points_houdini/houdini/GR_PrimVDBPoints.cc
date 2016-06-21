@@ -807,7 +807,7 @@ GR_PrimVDBPoints::updatePosBuffer(RE_Render* r,
         getPointOffsets(pointOffsets, grid.tree(), includeGroups);
 
         PositionAttribute positionAttribute(pdata, mCentroid);
-        convertPointDataGridPosition(positionAttribute, grid, pointOffsets, includeGroups);
+        convertPointDataGridPosition(positionAttribute, grid, 0, pointOffsets, includeGroups);
 
         // unmap the buffer so it can be used by GL and set the cache version
 
@@ -1025,11 +1025,11 @@ GR_PrimVDBPoints::updateVec3Buffer( RE_Render* r,
 
         if (type == "vec3s") {
             VectorAttribute<Vec3f> typedAttribute(data);
-            convertPointDataGridAttribute(typedAttribute, grid.tree(), pointOffsets, index, includeGroups);
+            convertPointDataGridAttribute(typedAttribute, grid.tree(), 0, pointOffsets, index, includeGroups);
         }
         else if (type == "vec3h") {
             VectorAttribute<openvdb::math::Vec3<half> > typedAttribute(data);
-            convertPointDataGridAttribute(typedAttribute, grid.tree(), pointOffsets, index, includeGroups);
+            convertPointDataGridAttribute(typedAttribute, grid.tree(), 0, pointOffsets, index, includeGroups);
         }
 
         // unmap the buffer so it can be used by GL and set the cache version
