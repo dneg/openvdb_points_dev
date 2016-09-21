@@ -34,6 +34,9 @@
 #include <openvdb_points/tools/PointDataGrid.h>
 #include <openvdb_points/openvdb.h>
 #include <openvdb/openvdb.h>
+#include <openvdb/io/io.h>
+
+#include <cstdlib> // setenv, unsetenv
 
 class TestPointDataLeaf: public CppUnit::TestCase
 {
@@ -879,6 +882,7 @@ TestPointDataLeaf::testIterators()
 void
 TestPointDataLeaf::testIO()
 {
+    using namespace openvdb;
     using namespace openvdb::tools;
 
     // Define and register some common attribute types
@@ -947,18 +951,45 @@ TestPointDataLeaf::testIO()
     {
         LeafType leaf2(openvdb::Coord(0, 0, 0));
 
+        io::StreamMetadata::Ptr streamMetadata(new io::StreamMetadata);
+
         std::ostringstream ostr(std::ios_base::binary);
+        io::setStreamMetadataPtr(ostr, streamMetadata);
         leaf.writeTopology(ostr);
+#ifdef OPENVDB_HAS_MULTIPLE_LEAF_BUFFERS
+        for (Index b = 0; b < leaf.buffers(); b++) {
+            streamMetadata->setLeafBuffer(b);
+            leaf.writeBuffers(ostr);
+        }
+        { // error checking
+            streamMetadata->setLeafBuffer(1000);
+            leaf.writeBuffers(ostr);
+
+            io::StreamMetadata::Ptr meta;
+            io::setStreamMetadataPtr(ostr, meta);
+            io::setDataCompression(ostr, io::getDataCompression(ostr) | io::COMPRESS_MULTIPLE_LEAF_BUFFERS);
+            CPPUNIT_ASSERT_THROW(leaf.writeBuffers(ostr), openvdb::IoError);
+        }
+#else
         leaf.writeBuffers(ostr);
+#endif
 
         std::istringstream istr(ostr.str(), std::ios_base::binary);
+        io::setStreamMetadataPtr(istr, streamMetadata);
 
         // Since the input stream doesn't include a VDB header with file format version info,
         // tag the input stream explicitly with the current version number.
-        openvdb::io::setCurrentVersion(istr);
+        io::setCurrentVersion(istr);
 
         leaf2.readTopology(istr);
+#ifdef OPENVDB_HAS_MULTIPLE_LEAF_BUFFERS
+        for (Index b = 0; b < leaf.buffers(); b++) {
+            streamMetadata->setLeafBuffer(b);
+            leaf2.readBuffers(istr);
+        }
+#else
         leaf2.readBuffers(istr);
+#endif
 
         // check topology matches
 
@@ -970,6 +1001,71 @@ TestPointDataLeaf::testIO()
 
         CPPUNIT_ASSERT_EQUAL(leaf2.getValue(4), ValueType(20));
         CPPUNIT_ASSERT_EQUAL(leaf2.attributeSet().size(), size_t(2));
+    }
+
+    { // test multi-buffer IO
+        // create a new grid with a single origin leaf
+
+        PointDataGrid::Ptr grid = PointDataGrid::create();
+        grid->setName("points");
+        grid->tree().addLeaf(new LeafType(leaf));
+
+        openvdb::GridCPtrVec grids;
+        grids.push_back(grid);
+
+        // disable multiple leaf buffers and write to file
+
+        setenv("OPENVDB_DISABLE_MULTIPLE_LEAF_BUFFERS", /*value=*/"1", /*overwrite*/1);
+
+        {
+            io::File file("nonmultibuffer.vdb");
+            file.write(grids);
+            file.close();
+        }
+
+        // enable multiple leaf buffers and write to file
+
+        unsetenv("OPENVDB_DISABLE_MULTIPLE_LEAF_BUFFERS");
+
+        {
+            io::File file("multibuffer.vdb");
+            file.write(grids);
+            file.close();
+        }
+
+        // read grids from file
+
+        PointDataGrid::Ptr multiBufferGrid;
+        PointDataGrid::Ptr nonMultiBufferGrid;
+
+        {
+            io::File file("nonmultibuffer.vdb");
+            file.open();
+            openvdb::GridBase::Ptr baseGrid = file.readGrid("points");
+            file.close();
+
+            nonMultiBufferGrid = openvdb::gridPtrCast<PointDataGrid>(baseGrid);
+        }
+
+        {
+            io::File file("multibuffer.vdb");
+            file.open();
+            openvdb::GridBase::Ptr baseGrid = file.readGrid("points");
+            file.close();
+
+            multiBufferGrid = openvdb::gridPtrCast<PointDataGrid>(baseGrid);
+        }
+
+        LeafType* multiBufferLeaf = multiBufferGrid->tree().probeLeaf(openvdb::Coord(0, 0, 0));
+        CPPUNIT_ASSERT(multiBufferLeaf);
+
+        LeafType* nonMultiBufferLeaf = nonMultiBufferGrid->tree().probeLeaf(openvdb::Coord(0, 0, 0));
+        CPPUNIT_ASSERT(nonMultiBufferLeaf);
+
+        CPPUNIT_ASSERT(*multiBufferLeaf == *nonMultiBufferLeaf);
+
+        remove("multibuffer.vdb");
+        remove("nonmultibuffer.vdb");
     }
 }
 

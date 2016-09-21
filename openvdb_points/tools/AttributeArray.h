@@ -303,7 +303,27 @@ public:
     virtual void read(std::istream&) = 0;
     /// Write attribute metadata and buffers to a stream.
     /// @param outputTransient if true, write out transient attributes
-    virtual void write(std::ostream&, bool outputTransient = false) const = 0;
+    virtual void write(std::ostream&, bool outputTransient) const = 0;
+    /// Write attribute metadata and buffers to a stream, don't write transient attributes.
+    virtual void write(std::ostream&) const = 0;
+
+    /// Read attribute metadata from a stream.
+    virtual void readMetadata(std::istream&) = 0;
+    /// Write attribute metadata to a stream.
+    /// @param outputTransient if true, write out transient attributes
+    virtual void writeMetadata(std::ostream&, bool outputTransient) const = 0;
+
+    /// Read attribute uniform value from a stream.
+    virtual void readUniform(std::istream&) = 0;
+    /// Write attribute uniform value to a stream.
+    /// @param outputTransient if true, write out transient attributes
+    virtual void writeUniform(std::ostream&, bool outputTransient) const = 0;
+
+    /// Read attribute buffers from a stream.
+    virtual void readBuffers(std::istream&) = 0;
+    /// Write attribute buffers to a stream.
+    /// @param outputTransient if true, write out transient attributes
+    virtual void writeBuffers(std::ostream&, bool outputTransient) const = 0;
 
     /// Ensures all data is in-core
     virtual void loadData() const = 0;
@@ -571,7 +591,26 @@ public:
     virtual void read(std::istream& is);
     /// Write attribute data to a stream.
     /// @param outputTransient if true, write out transient attributes
-    virtual void write(std::ostream&, bool outputTransient = false) const;
+    virtual void write(std::ostream&, bool outputTransient) const;
+    /// Write attribute data to a stream, don't write transient attributes.
+    virtual void write(std::ostream&) const;
+
+    /// Read attribute metadata from a stream.
+    virtual void readMetadata(std::istream&);
+    /// Write attribute metadata to a stream.
+    /// @param outputTransient if true, write out transient attributes
+    virtual void writeMetadata(std::ostream&, bool outputTransient) const;
+
+    /// Read attribute uniform from a stream.
+    virtual void readUniform(std::istream&);
+    /// Write attribute uniform to a stream.
+    virtual void writeUniform(std::ostream&, bool outputTransient) const;
+
+    /// Read attribute buffers from a stream.
+    virtual void readBuffers(std::istream&);
+    /// Write attribute buffers to a stream.
+    /// @param outputTransient if true, write out transient attributes
+    virtual void writeBuffers(std::ostream&, bool outputTransient) const;
 
     /// Return @c true if this buffer's values have not yet been read from disk.
     inline bool isOutOfCore() const;
@@ -1359,8 +1398,16 @@ template<typename ValueType_, typename Codec_>
 void
 TypedAttributeArray<ValueType_, Codec_>::read(std::istream& is)
 {
-    using attribute_compression::decompress;
+    this->readMetadata(is);
+    this->readUniform(is);
+    this->readBuffers(is);
+}
 
+
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::readMetadata(std::istream& is)
+{
     // read data
 
     Index64 bytes = Index64(0);
@@ -1375,12 +1422,10 @@ TypedAttributeArray<ValueType_, Codec_>::read(std::istream& is)
     is.read(reinterpret_cast<char*>(&size), sizeof(Index64));
     mSize = size;
 
-    char* buffer = new char[bytes];
-
     // read uniform and compressed state
 
     mIsUniform = mFlags & WRITEUNIFORM;
-    mCompressedBytes = mFlags & WRITEMEMCOMPRESS ? bytes : Index64(0);
+    mCompressedBytes = bytes;
 
     // read strided value (set to 1 if array is not strided)
 
@@ -1392,10 +1437,43 @@ TypedAttributeArray<ValueType_, Codec_>::read(std::istream& is)
     else {
         mStride = 1;
     }
+}
 
-    // clear uniform and compress flags
 
-    mFlags &= Int16(~WRITEUNIFORM & ~WRITEMEMCOMPRESS);
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::readUniform(std::istream& is)
+{
+    if (!mIsUniform)    return;
+
+    tbb::spin_mutex::scoped_lock lock(mMutex);
+
+    this->deallocate();
+
+    char* buffer = new char[mCompressedBytes];
+    is.read(buffer, mCompressedBytes);
+
+    // zero compressed bytes as uniform values are not compressed in memory
+
+    mCompressedBytes = Index64(0);
+
+    // set data to buffer
+
+    mData = reinterpret_cast<StorageType*>(buffer);
+
+    // clear all write flags
+
+    mFlags &= Int16(~WRITEUNIFORM & ~WRITEMEMCOMPRESS & ~WRITEDISKCOMPRESS);
+}
+
+
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::readBuffers(std::istream& is)
+{
+    if (mIsUniform)    return;
+
+    using attribute_compression::decompress;
 
     tbb::spin_mutex::scoped_lock lock(mMutex);
 
@@ -1412,17 +1490,38 @@ TypedAttributeArray<ValueType_, Codec_>::read(std::istream& is)
         mFileInfo.reset(new FileInfo);
         mFileInfo->bufpos = is.tellg();
         mFileInfo->mapping = mappedFile;
-        mFileInfo->bytes = bytes;
+        mFileInfo->bytes = mCompressedBytes;
         mFileInfo->meta = io::getStreamMetadataPtr(is);
 
+#ifdef OPENVDB_HAS_SEEKABLE_IO
         // read and discard buffer
-        is.read(buffer, bytes);
-        delete[] buffer;
+        if (mFileInfo->meta && mFileInfo->meta->seekable())
+        {
+            is.seekg(mCompressedBytes, std::ios_base::cur);
+        }
+        else
+#endif
+        {
+            boost::scoped_array<char> buffer(new char[mCompressedBytes]);
+            is.read(buffer.get(), mCompressedBytes);
+        }
+
+        // zero compressed bytes if not compressed in memory
+        if (!(mFlags & WRITEMEMCOMPRESS)) {
+            mCompressedBytes = Index64(0);
+        }
+
         return;
     }
 #endif
 
-    is.read(buffer, bytes);
+    char* buffer = new char[mCompressedBytes];
+    is.read(buffer, mCompressedBytes);
+
+    // zero compressed bytes if not compressed in memory
+    if (!(mFlags & WRITEMEMCOMPRESS)) {
+        mCompressedBytes = Index64(0);
+    }
 
     // compressed on-disk
 
@@ -1441,7 +1540,15 @@ TypedAttributeArray<ValueType_, Codec_>::read(std::istream& is)
 
     // clear all write flags
 
-    mFlags &= Int16(~WRITEDISKCOMPRESS);
+    mFlags &= Int16(~WRITEUNIFORM & ~WRITEMEMCOMPRESS & ~WRITEDISKCOMPRESS);
+}
+
+
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::write(std::ostream& os) const
+{
+    this->write(os, /*outputTransient=*/false);
 }
 
 
@@ -1449,7 +1556,17 @@ template<typename ValueType_, typename Codec_>
 void
 TypedAttributeArray<ValueType_, Codec_>::write(std::ostream& os, bool outputTransient) const
 {
-    using attribute_compression::compress;
+    this->writeMetadata(os, outputTransient);
+    this->writeUniform(os, outputTransient);
+    this->writeBuffers(os, outputTransient);
+}
+
+
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::writeMetadata(std::ostream& os, bool outputTransient) const
+{
+    using attribute_compression::compressedSize;
 
     if (!outputTransient && this->isTransient())    return;
 
@@ -1457,10 +1574,7 @@ TypedAttributeArray<ValueType_, Codec_>::write(std::ostream& os, bool outputTran
     Index64 size(mSize);
     Index stride(mStride);
 
-    boost::scoped_array<char> compressedBuffer;
     size_t compressedBytes = 0;
-
-    this->doLoad();
 
     if (isStrided())
     {
@@ -1474,19 +1588,22 @@ TypedAttributeArray<ValueType_, Codec_>::write(std::ostream& os, bool outputTran
     else if (this->isCompressed())
     {
         flags |= WRITEMEMCOMPRESS;
+        compressedBytes = mCompressedBytes;
     }
     else if (io::getDataCompression(os) & io::COMPRESS_BLOSC)
     {
+        this->doLoad();
+
         const char* charBuffer = reinterpret_cast<const char*>(mData);
         const size_t typeSize = sizeof(StorageType);
         const size_t inBytes = this->arrayMemUsage();
-        compressedBuffer.reset(compress(charBuffer, typeSize, inBytes, compressedBytes));
-        if (compressedBuffer)   flags |= WRITEDISKCOMPRESS;
+        compressedBytes = compressedSize(charBuffer, typeSize, inBytes);
+        if (compressedBytes > 0)   flags |= WRITEDISKCOMPRESS;
     }
 
     Index64 bytes = /*flags*/ sizeof(Int16) + /*size*/ sizeof(Index64);
 
-    bytes += compressedBuffer ? compressedBytes : this->arrayMemUsage();
+    bytes += (compressedBytes > 0) ? compressedBytes : this->arrayMemUsage();
 
     // write data
 
@@ -1494,10 +1611,53 @@ TypedAttributeArray<ValueType_, Codec_>::write(std::ostream& os, bool outputTran
     os.write(reinterpret_cast<const char*>(&flags), sizeof(Int16));
     os.write(reinterpret_cast<const char*>(&size), sizeof(Index64));
 
-    if (isStrided())    os.write(reinterpret_cast<const char*>(&stride), sizeof(Index));
+    // write strided
 
-    if (compressedBuffer)   os.write(reinterpret_cast<const char*>(compressedBuffer.get()), compressedBytes);
-    else                    os.write(reinterpret_cast<const char*>(mData), this->arrayMemUsage());
+    if (isStrided())    os.write(reinterpret_cast<const char*>(&stride), sizeof(Index));
+}
+
+
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::writeUniform(std::ostream& os, bool outputTransient) const
+{
+    if (!this->isUniform())                         return;
+    if (!outputTransient && this->isTransient())    return;
+
+    os.write(reinterpret_cast<const char*>(mData), sizeof(StorageType));
+}
+
+
+template<typename ValueType_, typename Codec_>
+void
+TypedAttributeArray<ValueType_, Codec_>::writeBuffers(std::ostream& os, bool outputTransient) const
+{
+    if (this->isUniform())                          return;
+    if (!outputTransient && this->isTransient())    return;
+
+    using attribute_compression::compress;
+
+    this->doLoad();
+
+    if (this->isCompressed())
+    {
+        os.write(reinterpret_cast<const char*>(mData), mCompressedBytes);
+    }
+    else if (io::getDataCompression(os) & io::COMPRESS_BLOSC)
+    {
+        boost::scoped_array<char> compressedBuffer;
+        size_t compressedBytes = 0;
+        const char* charBuffer = reinterpret_cast<const char*>(mData);
+        const size_t typeSize = sizeof(StorageType);
+        const size_t inBytes = this->arrayMemUsage();
+        compressedBuffer.reset(compress(charBuffer, typeSize, inBytes, compressedBytes));
+        if (compressedBuffer)   os.write(reinterpret_cast<const char*>(compressedBuffer.get()), compressedBytes);
+        else                    os.write(reinterpret_cast<const char*>(mData), inBytes);
+    }
+    else
+    {
+        os.write(reinterpret_cast<const char*>(mData), this->arrayMemUsage());
+    }
 }
 
 
@@ -1523,16 +1683,20 @@ TypedAttributeArray<ValueType_, Codec_>::doLoadUnsafe() const
     std::istream is(buf.get());
 
     const Index64 bytes = info.bytes;
+    io::setStreamMetadataPtr(is, info.meta, /*transfer=*/true);
 
     is.seekg(info.bufpos);
 
     char* buffer = new char[bytes];
     is.read(buffer, bytes);
 
+    if (mFlags & WRITEMEMCOMPRESS) {
+        self->mCompressedBytes = info.bytes;
+    }
+
     // compressed on-disk
 
     if (mFlags & WRITEDISKCOMPRESS) {
-
         // decompress buffer
 
         const size_t inBytes = this->arrayMemUsage(/*maximum=*/true);
@@ -1544,9 +1708,9 @@ TypedAttributeArray<ValueType_, Codec_>::doLoadUnsafe() const
 
     self->mData = reinterpret_cast<StorageType*>(buffer);
 
-    // clear write and out-of-core flags
+    // clear all write and out-of-core flags
 
-    self->mFlags &= Int16(~WRITEDISKCOMPRESS & ~OUTOFCORE);
+    self->mFlags &= Int16(~WRITEUNIFORM & ~WRITEMEMCOMPRESS & ~WRITEDISKCOMPRESS & ~OUTOFCORE);
 #endif
 }
 
