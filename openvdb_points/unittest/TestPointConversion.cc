@@ -50,11 +50,13 @@ public:
     CPPUNIT_TEST_SUITE(TestPointConversion);
     CPPUNIT_TEST(testPointConversion);
     CPPUNIT_TEST(testStride);
+    CPPUNIT_TEST(testAutoVoxelSize);
 
     CPPUNIT_TEST_SUITE_END();
 
     void testPointConversion();
     void testStride();
+    void testAutoVoxelSize();
 
 }; // class TestPointConversion
 
@@ -550,6 +552,163 @@ TestPointConversion::testStride()
     }
 }
 
+
+////////////////////////////////////////
+
+
+void
+TestPointConversion::testAutoVoxelSize()
+{
+    AttributeWrapper<Vec3f> position(/*stride*/1);
+
+    static const Vec3R min(-std::numeric_limits<Real>::max());
+    static const Vec3R max(std::numeric_limits<Real>::max());
+
+    // test with no positions
+
+    {
+        const float voxelSize = autoVoxelSize(position, /*points per voxel*/8);
+        CPPUNIT_ASSERT_EQUAL(voxelSize, 0.1f);
+    }
+
+    // test with one point
+
+    {
+        position.resize(1);
+        AttributeWrapper<Vec3f>::Handle positionHandle(position);
+        positionHandle.set(0, 0, Vec3f(0.0f));
+
+        const float voxelSize = autoVoxelSize(position, /*points per voxel*/8);
+        CPPUNIT_ASSERT_EQUAL(voxelSize, 0.1f);
+    }
+
+    // test with n points, where n > 1 && n <= num points per voxel
+
+    {
+        position.resize(7);
+        AttributeWrapper<Vec3f>::Handle positionHandle(position);
+        positionHandle.set(0, 0, Vec3f(-8.6f, 0.0f,-23.8f));
+        positionHandle.set(1, 0, Vec3f( 8.6f, 7.8f, 23.8f));
+
+        for(size_t i = 2; i < 7; ++ i)
+            positionHandle.set(i, 0, Vec3f(0.0f));
+
+        float voxelSize = autoVoxelSize(position, /*points per voxel*/8);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 18.5528f, /*tolerance=*/1e-4);
+
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 5.51306f, /*tolerance=*/1e-4);
+
+        // test decimal place accuracy
+
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1, max, min, math::Mat4d::identity(), 10);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 5.5130610466f, /*tolerance=*/1e-9);
+
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1, max, min, math::Mat4d::identity(), 1);
+        CPPUNIT_ASSERT_EQUAL(voxelSize, 5.5f);
+    }
+
+    // test where all points line on a plane
+
+    {
+        position.resize(5);
+        AttributeWrapper<Vec3f>::Handle positionHandle(position);
+        positionHandle.set(0, 0, Vec3f(0.0f, 0.0f, 10.0f));
+        positionHandle.set(1, 0, Vec3f(0.0f, 0.0f, -10.0f));
+        positionHandle.set(2, 0, Vec3f(20.0f, 0.0f, -10.0f));
+        positionHandle.set(3, 0, Vec3f(20.0f, 0.0f, 10.0f));
+        positionHandle.set(4, 0, Vec3f(10.0f, 0.0f, 0.0f));
+
+        float voxelSize = autoVoxelSize(position, /*points per voxel*/5);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 3.41995f, /*tolerance=*/1e-4);
+
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 2.0f, /*tolerance=*/1e-4);
+    }
+
+    // Generate a sphere
+    // NOTE: The sphere does NOT provide uniform distribution
+
+    const unsigned long count(40000);
+
+    position.resize(0);
+
+    AttributeWrapper<int> xyz(1);
+    AttributeWrapper<int> id(1);
+    AttributeWrapper<float> uniform(1);
+    AttributeWrapper<openvdb::Name> string(1);
+    GroupWrapper group;
+
+    genPoints(count, /*scale=*/ 100.0, /*stride=*/false,
+                position, xyz, id, uniform, string, group);
+
+    CPPUNIT_ASSERT_EQUAL(position.size(), count);
+    CPPUNIT_ASSERT_EQUAL(id.size(), count);
+    CPPUNIT_ASSERT_EQUAL(uniform.size(), count);
+    CPPUNIT_ASSERT_EQUAL(string.size(), count);
+    CPPUNIT_ASSERT_EQUAL(group.size(), count);
+
+    // test a distributed point set around a sphere
+
+    {
+        const float voxelSize = autoVoxelSize(position, /*points per voxel*/2);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 3.95184f, /*tolerance=*/1e-4);
+
+        openvdb::math::Transform::Ptr transform(openvdb::math::Transform::createLinearTransform(voxelSize));
+
+        PointIndexGrid::Ptr pointIndexGrid = createPointIndexGrid<PointIndexGrid>(position, *transform);
+        PointDataGrid::Ptr pointDataGrid = createPointDataGrid<NullCodec, PointDataGrid>(*pointIndexGrid, position, *transform);
+
+        const Index64 voxelCount = pointDataGrid->activeVoxelCount();
+        const Index64 averagePointCount = count / voxelCount;
+        CPPUNIT_ASSERT(averagePointCount < 5);
+    }
+
+    // test with given target transforms
+
+    {
+        // test that a different scale doesn't change the result
+
+        openvdb::math::Transform::Ptr transform1(openvdb::math::Transform::createLinearTransform(0.33));
+        openvdb::math::Transform::Ptr transform2(openvdb::math::Transform::createLinearTransform(0.87));
+
+        math::UniformScaleMap::ConstPtr scaleMap1 = transform1->constMap<math::UniformScaleMap>();
+        math::UniformScaleMap::ConstPtr scaleMap2 = transform2->constMap<math::UniformScaleMap>();
+        CPPUNIT_ASSERT(scaleMap1.get());
+        CPPUNIT_ASSERT(scaleMap2.get());
+
+        math::AffineMap::ConstPtr affineMap1 = scaleMap1->getAffineMap();
+        math::AffineMap::ConstPtr affineMap2 = scaleMap2->getAffineMap();
+
+        float voxelSize1 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap1->getMat4());
+        float voxelSize2 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap2->getMat4());
+        CPPUNIT_ASSERT_EQUAL(voxelSize1, voxelSize2);
+
+        // test that applying a rotation roughly calculates to the same result for this example
+        // NOTE: distribution is not uniform
+
+        // Rotate by 45 degrees in X, Y, Z
+
+        transform1->postRotate(M_PI / 4.0, math::X_AXIS);
+        transform1->postRotate(M_PI / 4.0, math::Y_AXIS);
+        transform1->postRotate(M_PI / 4.0, math::Z_AXIS);
+
+        affineMap1 = transform1->constMap<math::AffineMap>();
+        CPPUNIT_ASSERT(affineMap1.get());
+
+        float voxelSize3 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap1->getMat4());
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize1, voxelSize3, 0.01);
+
+        // test that applying a translation roughly calculates to the same result for this example
+
+        transform1->postTranslate(Vec3d(-5.0f, 3.3f, 20.1f));
+        affineMap1 = transform1->constMap<math::AffineMap>();
+        CPPUNIT_ASSERT(affineMap1.get());
+
+        float voxelSize4 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap1->getMat4());
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize1, voxelSize4, 0.1);
+    }
+}
 
 // Copyright (c) 2015-2016 Double Negative Visual Effects
 // All rights reserved. This software is distributed under the

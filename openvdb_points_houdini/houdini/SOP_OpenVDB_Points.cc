@@ -593,10 +593,22 @@ newSopOperator(OP_OperatorTable* table)
         .setDefault("points")
         .setHelpText("Output grid name."));
 
+    parms.add(hutil::ParmFactory(PRM_TOGGLE, "automatic", "Automatic Voxel Size")
+        .setDefault(PRMzeroDefaults)
+        .setHelpText("*BETA* When enabled, automatically attempts to calculate a "
+                     "target transform of an input Houdini Point set for best "
+                     "representing the points in a PointDataGrid."));
+
     parms.add(hutil::ParmFactory(PRM_FLT_J, "voxelsize", "Voxel Size")
         .setDefault(PRMpointOneDefaults)
         .setHelpText("The desired voxel size of the new VDB Points grid.")
         .setRange(PRM_RANGE_RESTRICTED, 0, PRM_RANGE_UI, 5));
+
+    parms.add(hutil::ParmFactory(PRM_INT_J, "pointspervoxel", "Points Per Voxel")
+        .setDefault(8)
+        .setHelpText("The average amount of points per voxel to aim for in the new "
+                     "transform.")
+        .setRange(PRM_RANGE_RESTRICTED, 1, PRM_RANGE_UI, 16));
 
     // Group name (Transform reference)
     parms.add(hutil::ParmFactory(PRM_STRING, "refvdb", "Reference VDB")
@@ -714,6 +726,7 @@ SOP_OpenVDB_Points::updateParmsFlags()
 
     const bool toVdbPoints = evalInt("conversion", 0, 0) == 0;
     const bool convertAll = evalInt("mode", 0, 0) == 0;
+    const bool automatic = evalInt("automatic", 0, 0) == 1;
 
     changed |= enableParm("group", !toVdbPoints);
     changed |= setVisibleState("group", !toVdbPoints);
@@ -726,8 +739,14 @@ SOP_OpenVDB_Points::updateParmsFlags()
     changed |= enableParm("refvdb", refexists);
     changed |= setVisibleState("refvdb", toVdbPoints);
 
-    changed |= enableParm("voxelsize", !refexists && toVdbPoints);
-    changed |= setVisibleState("voxelsize", toVdbPoints);
+    changed |= enableParm("voxelsize", !refexists && toVdbPoints && !automatic);
+    changed |= setVisibleState("voxelsize", toVdbPoints && !automatic);
+
+    changed |= enableParm("pointspervoxel", !refexists && toVdbPoints && automatic);
+    changed |= setVisibleState("pointspervoxel", toVdbPoints && automatic);
+
+    changed |= enableParm("automatic", !refexists && toVdbPoints);
+    changed |= setVisibleState("automatic", toVdbPoints);
 
     changed |= setVisibleState("transferHeading", toVdbPoints);
 
@@ -836,7 +855,32 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
             }
         }
         else {
-            float voxelSize = evalFloat("voxelsize", 0, time);
+            const bool automatic = evalInt("automatic", 0, time);
+            float voxelSize(0.1f);
+
+            if(automatic)
+            {
+                UT_BoundingBox bbox;
+                if(!ptGeo->getPointBBox(&bbox)) {
+                    addError(SOP_MESSAGE, "Unable to get valid bounding box");
+                    return error();
+                }
+
+                const openvdb::Vec3R min(bbox.xmin(), bbox.ymin(), bbox.zmin());
+                const openvdb::Vec3R max(bbox.xmax(), bbox.ymax(), bbox.zmax());
+
+                const int pointsPerVoxel = evalInt("pointspervoxel", 0, time);
+
+                hvdbp::HoudiniReadAttribute<openvdb::Vec3R> positions(*(ptGeo->getP()));
+
+                hvdb::Interrupter boss("Points");
+                voxelSize = openvdb::tools::autoVoxelSize(positions, pointsPerVoxel, &boss, min, max);
+            }
+            else
+            {
+                voxelSize = evalFloat("voxelsize", 0, time);
+            }
+
             transform = Transform::createLinearTransform(voxelSize);
         }
 
