@@ -1479,7 +1479,7 @@ TestAttributeArray::testDelayedLoad()
             attrB.read(filein);
 
 #ifndef OPENVDB_2_ABI_COMPATIBLE
-            CPPUNIT_ASSERT(attrB.isOutOfCore());
+            CPPUNIT_ASSERT(!attrB.isOutOfCore());
 #endif
 
             CPPUNIT_ASSERT(attrB.isUniform());

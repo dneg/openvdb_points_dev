@@ -29,6 +29,7 @@
 ///////////////////////////////////////////////////////////////////////////
 
 #include "openvdb.h"
+#include <openvdb/io/io.h>
 
 #include <openvdb_points/tools/AttributeArray.h>
 #include <openvdb_points/tools/AttributeArrayString.h>
@@ -101,6 +102,11 @@ initialize()
     Metadata::registerType(typeNameAsString<PointDataIndex32>(), Int32Metadata::createMetadata);
     Metadata::registerType(typeNameAsString<PointDataIndex64>(), Int64Metadata::createMetadata);
     tools::PointDataGrid::registerGrid();
+
+#ifdef OPENVDB_HAS_MULTIPLE_LEAF_BUFFERS
+    // Register PointDataGrid as using multiple pass leaf traversal
+    io::registerMultipleLeafBuffers(tools::PointDataGrid::gridType());
+#endif
 
 #ifdef __ICC
 // Disable ICC "assignment to statically allocated variable" warning.<

@@ -227,9 +227,9 @@ public:
     /// @param outputTransient if true, write out transient attributes
     void writeMetadata(std::ostream&, bool outputTransient = false) const;
 
-    /// Read attribute data from a stream.
+    /// This will read the attribute data from a stream.
     void readAttributes(std::istream&);
-    /// Write attribute data to a stream.
+    /// This will write the attribute data to a stream.
     /// @param outputTransient if true, write out transient attributes
     void writeAttributes(std::ostream&, bool outputTransient = false) const;
 

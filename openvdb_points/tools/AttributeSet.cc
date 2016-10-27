@@ -470,7 +470,16 @@ AttributeSet::write(std::ostream& os, bool outputTransient) const
 void
 AttributeSet::readMetadata(std::istream& is)
 {
+    assert(mDescr);
+
     mDescr->read(is);
+
+    AttrArrayVec(mDescr->size()).swap(mAttrs); // allocate vector
+
+    for (size_t n = 0, N = mAttrs.size(); n < N; ++n) {
+        mAttrs[n] = AttributeArray::create(mDescr->type(n), 1, 1);
+        mAttrs[n]->readMetadata(is);
+    }
 }
 
 
@@ -500,22 +509,22 @@ AttributeSet::writeMetadata(std::ostream& os, bool outputTransient) const
         Descriptor::Ptr descr = mDescr->duplicateDrop(transientArrays);
         descr->write(os);
     }
+
+    // write attribute metadata
+
+    for (size_t i = 0; i < size(); i++) {
+        const AttributeArray* array = this->getConst(i);
+        array->writeMetadata(os, outputTransient);
+    }
 }
 
 
 void
 AttributeSet::readAttributes(std::istream& is)
 {
-    if (!mDescr) {
-        OPENVDB_THROW(IllegalValueException, "Attribute set descriptor not defined.");
-    }
-
-    AttrArrayVec(mDescr->size()).swap(mAttrs); // allocate vector
-
-    for (size_t n = 0, N = mAttrs.size(); n < N; ++n) {
-        // size and stride are defined when read from disk
-        mAttrs[n] = AttributeArray::create(mDescr->type(n), /*size*/1, /*stride*/1);
-        mAttrs[n]->read(is);
+    for (size_t i = 0; i < mAttrs.size(); i++) {
+        mAttrs[i]->readUniform(is);
+        mAttrs[i]->readBuffers(is);
     }
 }
 
@@ -523,8 +532,9 @@ AttributeSet::readAttributes(std::istream& is)
 void
 AttributeSet::writeAttributes(std::ostream& os, bool outputTransient) const
 {
-    for (size_t n = 0, N = mAttrs.size(); n < N; ++n) {
-        mAttrs[n]->write(os, outputTransient);
+    for (size_t i = 0; i < mAttrs.size(); i++) {
+        mAttrs[i]->writeUniform(os, outputTransient);
+        mAttrs[i]->writeBuffers(os, outputTransient);
     }
 }
 
