@@ -42,7 +42,6 @@
 #include <openvdb/math/Transform.h>
 
 #include <openvdb/tools/PointIndexGrid.h>
-#include <openvdb/tools/LevelSetUtil.h> // for segmentActiveVoxels
 #include <openvdb/tools/PointsToMask.h>
 #include <openvdb/util/NullInterrupter.h>
 
@@ -196,11 +195,13 @@ convertPointDataGridGroup(  Group& group,
 ///          bounds are calculated using threaded functors
 ///
 /// @param positions        the world space positions
-///        pointsPerVoxel   the target amount of points per voxel
+///        pointsPerVoxel   the target amount of points per voxel. Cannot be zero
 ///        minBounds        the minimum bounds of the point positions
 ///        maxBounds        the maximum bounds of the point positions
 ///        targetTransform  an optional target transform
-///        decimalPlaces    the decimal place precision of the final voxel size
+///        decimalPlaces    the decimal place precision of the final voxel size. If the truncation
+///                         evaluates to 0, this value will be ignored and the first valid truncated
+///                         result will be returned
 ///
 /// @note any scale on a provided targetTransform matrix is respected when applying the new voxel size,
 ///       so that rotations are correctly affected
@@ -772,21 +773,6 @@ struct ConvertPointDataGridGroupOp {
     const bool                              mInCoreOnly;
 }; // ConvertPointDataGridGroupOp
 
-inline bool voxelSizeFromVolume(const double volume, const size_t estimatedVoxelCount, float& voxelSize)
-{
-    // calculate the voxel size (along one axis)
-
-    assert(volume > 0.0);
-
-    float scaleFactor = static_cast<float>(estimatedVoxelCount) / volume;
-    scaleFactor = static_cast<float>(math::Pow(static_cast<double>(scaleFactor), 1.0/3.0));
-
-    assert(scaleFactor > 0.0f);
-    voxelSize = (1.0f / scaleFactor);
-
-    return !math::isApproxZero(voxelSize);
-}
-
 template<typename PositionArrayT>
 struct CalculatePositionBounds
 {
@@ -1085,7 +1071,41 @@ inline float autoVoxelSize(const PositionWrapper& positions,
 {
     using namespace point_conversion_internal;
 
+    struct Local {
+
+        static bool voxelSizeFromVolume(const double volume, const size_t estimatedVoxelCount, float& voxelSize)
+        {
+            // calculate the voxel size (along one axis)
+
+            if(volume == 0.0) return false;
+
+            double scaleFactor = static_cast<double>(estimatedVoxelCount) / volume;
+            scaleFactor = math::Pow(scaleFactor, 1.0/3.0);
+
+            if(scaleFactor == 0.0) return false;
+
+            voxelSize = (1.0 / scaleFactor);
+            return !math::isApproxZero(voxelSize);
+        }
+
+        static float truncate(const float voxelSize, Index decimalPlaces)
+        {
+            // get the first valid truncated result - never return 0
+
+            float truncatedVoxelSize = math::Truncate(voxelSize, decimalPlaces++);
+
+            while(truncatedVoxelSize == 0.0) {
+                truncatedVoxelSize = math::Truncate(voxelSize, decimalPlaces++);
+            }
+
+            return truncatedVoxelSize;
+        }
+    };
+
     if(pointsPerVoxel == 0) OPENVDB_THROW(ValueError, "Points per voxel cannot be zero.");
+
+    // constructed with the default voxel size as specified by openvdb
+    // interface values
 
     float voxelSize(0.1f);
 
@@ -1098,7 +1118,7 @@ inline float autoVoxelSize(const PositionWrapper& positions,
     // if the provided bounds are invalid, try to recompute
 
     if(minBounds[0] > maxBounds[0] ||
-       minBounds[1] > maxBounds[2] ||
+       minBounds[1] > maxBounds[1] ||
        minBounds[2] > maxBounds[2])
     {
         tbb::blocked_range<size_t> range(0, numPoints);
@@ -1119,19 +1139,21 @@ inline float autoVoxelSize(const PositionWrapper& positions,
         maxBounds[i] += voxelSize / 2.0f;
     }
 
-    const Vec3d extents(maxBounds - minBounds);
+    const Vec3R extents(maxBounds - minBounds);
     double volume = extents[0] * extents[1] * extents[2];
-    assert(!math::isApproxZero(volume));
 
-    const size_t estimatedVoxelCount(math::Max((numPoints / pointsPerVoxel), 1ul));
-    voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize);
+    const size_t estimatedVoxelCount(math::Max((numPoints / pointsPerVoxel), size_t(1)));
+    if(!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
+        OPENVDB_LOG_WARN("Unable to evaluate an automatic voxel size. Returning defaults.");
+        return 0.1f;
+    }
 
-    size_t previousSegments(0);
-    size_t currentSegments(1);
+    size_t previousVoxelCount(0);
+    size_t currentVoxelCount(1);
 
-    if(interrupter) interrupter->start("autoVoxelSize: Calculating Voxel Size");
+    if(interrupter) interrupter->start("Calculating automatic voxel size");
 
-    while(currentSegments > previousSegments)
+    while(currentVoxelCount > previousVoxelCount)
     {
         math::Transform::Ptr newTransform;
 
@@ -1150,38 +1172,19 @@ inline float autoVoxelSize(const PositionWrapper& positions,
         }
 
         // create a mask grid of the points from the calculated voxel size
-        // this is the same fucntion call as tools::createPointMask() which has
+        // this is the same function call as tools::createPointMask() which has
         // been copied to provide an interrupter
 
         MaskGrid::Ptr mask = createGrid<MaskGrid>(false);
+        mask->setTransform(newTransform);
+        tools::PointsToMask<MaskGrid, InterrupterT> pointMaskOp(*mask, interrupter);
+        pointMaskOp.addPoints(positions);
 
-        {
-            mask->setTransform(newTransform);
-            tools::PointsToMask<MaskGrid, InterrupterT> pointMaskOp(*mask, interrupter);
-            pointMaskOp.addPoints(positions);
+        if(interrupter && util::wasInterrupted(interrupter)) break;
 
-            if(interrupter && util::wasInterrupted(interrupter)) break;
-        }
-
-        // get a vector of active mask segments
-
-        std::vector<MaskGrid::Ptr> tmp;
-        tools::segmentActiveVoxels(*mask, tmp);
-
-        previousSegments = currentSegments;
-        currentSegments = tmp.size();
-
-        double newVolume(0.0);
-
-        // calculate the new volume spanned by each segment
-
-        const double voxelVolume = math::Pow3(voxelSize);
-
-        for(std::vector<MaskGrid::Ptr>::const_iterator it = tmp.begin(), itEnd = tmp.end();
-            it != itEnd; ++it)
-        {
-            newVolume += voxelVolume * (**it).activeVoxelCount();
-        }
+        previousVoxelCount = currentVoxelCount;
+        currentVoxelCount = mask->activeVoxelCount();
+        const double newVolume = math::Pow3(voxelSize) * currentVoxelCount;
 
         // stop if no change in the volume or the volume has increased
 
@@ -1192,20 +1195,23 @@ inline float autoVoxelSize(const PositionWrapper& positions,
 
         // if the voxel size is invalid (too close to zero) return the previous size
 
-        if(!voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
+        if(!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
             voxelSize = previousVoxelSize;
             break;
         }
 
+        // if the new voxel size has changed by less than 10% of its original value
+        // then halt the iterative calculation to avoid infinite looping
+        // as we are approaching a solution
+
         if(voxelSize / previousVoxelSize > 0.9f) break;
-        if(interrupter && util::wasInterrupted(interrupter)) break;
     }
 
     if(interrupter) interrupter->end();
 
     // round the voxel size and return
 
-    return math::Truncate(voxelSize, decimalPlaces);
+    return Local::truncate(voxelSize, decimalPlaces);
 }
 
 template<typename PositionWrapper>

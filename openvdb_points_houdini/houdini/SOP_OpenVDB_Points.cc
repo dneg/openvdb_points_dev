@@ -595,7 +595,7 @@ newSopOperator(OP_OperatorTable* table)
 
     parms.add(hutil::ParmFactory(PRM_TOGGLE, "automatic", "Automatic Voxel Size")
         .setDefault(PRMzeroDefaults)
-        .setHelpText("*BETA* When enabled, automatically attempts to calculate a "
+        .setHelpText("When enabled, automatically attempts to calculate a "
                      "target transform of an input Houdini Point set for best "
                      "representing the points in a PointDataGrid."));
 
@@ -606,8 +606,8 @@ newSopOperator(OP_OperatorTable* table)
 
     parms.add(hutil::ParmFactory(PRM_INT_J, "pointspervoxel", "Points Per Voxel")
         .setDefault(8)
-        .setHelpText("The average amount of points per voxel to aim for in the new "
-                     "transform.")
+        .setHelpText("The number of points per voxel to use as the target for "
+                     "automatic voxel size computation.")
         .setRange(PRM_RANGE_RESTRICTED, 1, PRM_RANGE_UI, 16));
 
     // Group name (Transform reference)
@@ -873,8 +873,7 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
 
                 hvdbp::HoudiniReadAttribute<openvdb::Vec3R> positions(*(ptGeo->getP()));
 
-                hvdb::Interrupter boss("Points");
-                voxelSize = openvdb::tools::autoVoxelSize(positions, pointsPerVoxel, &boss, min, max);
+                voxelSize = openvdb::tools::autoVoxelSize(positions, pointsPerVoxel, &mBoss, min, max);
             }
             else
             {
@@ -891,6 +890,8 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
         const GU_Detail* detail;
 
         // unpack any packed primitives
+
+        mBoss.start();
 
         for (GA_Iterator it(ptGeo->getPrimitiveRange()); !it.atEnd(); ++it)
         {
