@@ -31,6 +31,8 @@ if [ "$TASK" = "pre_install" ]; then
     sed -i 's/-pthread/-pthread -Wall -Wextra -Werror -pedantic/g' openvdb_points*/Makefile
     # only enable code coverage for GCC, debug, non-Houdini configurations
     if [ "$CXX" = "g++" ]; then
+        # disable unused local typedefs
+        sed -i 's/-pthread/-pthread -Wno-unused-local-typedefs/g' openvdb_points*/Makefile
         if [ "$RELEASE" = "no" ]; then
             if [ "$HOUDINI_BUILD" = "none" ]; then
                 sed -i 's/-pthread/--coverage -pthread/g' openvdb_points*/Makefile

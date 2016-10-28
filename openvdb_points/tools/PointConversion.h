@@ -42,12 +42,16 @@
 #include <openvdb/math/Transform.h>
 
 #include <openvdb/tools/PointIndexGrid.h>
+#include <openvdb/tools/PointsToMask.h>
+#include <openvdb/util/NullInterrupter.h>
 
 #include <openvdb_points/tools/AttributeArrayString.h>
 #include <openvdb_points/tools/AttributeSet.h>
 #include <openvdb_points/tools/IndexFilter.h>
 #include <openvdb_points/tools/PointDataGrid.h>
 #include <openvdb_points/tools/PointGroup.h>
+
+#include <tbb/parallel_reduce.h>
 
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
@@ -182,6 +186,47 @@ convertPointDataGridGroup(  Group& group,
                             const std::vector<Name>& includeGroups = std::vector<Name>(),
                             const std::vector<Name>& excludeGroups = std::vector<Name>(),
                             const bool inCoreOnly = true);
+
+/// @ brief Given a list of world space positions, calculate a uniform voxel size that best represents the
+///         storage of the points in a VDB grid.
+///
+/// @details Returns a voxel size that is expected to be used to construct a PointDataGrid with the
+///          provided positions. If minBounds and maxBounds represent a positive volume, the world spaces
+///          bounds are calculated using threaded functors
+///
+/// @param positions        the world space positions
+///        pointsPerVoxel   the target amount of points per voxel. Cannot be zero
+///        minBounds        the minimum bounds of the point positions
+///        maxBounds        the maximum bounds of the point positions
+///        targetTransform  an optional target transform
+///        decimalPlaces    the decimal place precision of the final voxel size. If the truncation
+///                         evaluates to 0, this value will be ignored and the first valid truncated
+///                         result will be returned
+///
+/// @note any scale on a provided targetTransform matrix is respected when applying the new voxel size,
+///       so that rotations are correctly affected
+///
+/// @note if zero points or only one point, the default voxel size of 0.1 is returned. If at any iteration
+///       a valid volume could not be calculated, the previous calculation is returned.
+///
+template<typename PositionWrapper>
+inline float
+autoVoxelSize(  const PositionWrapper& positions,
+                const size_t pointsPerVoxel,
+                Vec3R minBounds = Vec3R(std::numeric_limits<Real>::max()),
+                Vec3R maxBounds = Vec3R(-std::numeric_limits<Real>::max()),
+                const math::Mat4d targetTransform = math::Mat4d::identity(),
+                const Index decimalPlaces = 5);
+
+template<typename PositionWrapper, typename InterrupterT>
+inline float
+autoVoxelSize(  const PositionWrapper& positions,
+                const size_t pointsPerVoxel,
+                InterrupterT* interrupter,
+                Vec3R minBounds = Vec3R(std::numeric_limits<Real>::max()),
+                Vec3R maxBounds = Vec3R(-std::numeric_limits<Real>::max()),
+                const math::Mat4d targetTransform = math::Mat4d::identity(),
+                const Index decimalPlaces = 5);
 
 
 ////////////////////////////////////////
@@ -728,6 +773,42 @@ struct ConvertPointDataGridGroupOp {
     const bool                              mInCoreOnly;
 }; // ConvertPointDataGridGroupOp
 
+template<typename PositionArrayT>
+struct CalculatePositionBounds
+{
+    CalculatePositionBounds(const PositionArrayT& positions)
+        : mPositions(positions)
+        , mMin(std::numeric_limits<Real>::max())
+        , mMax(-std::numeric_limits<Real>::max()) {}
+
+    CalculatePositionBounds(const CalculatePositionBounds& other, tbb::split)
+        : mPositions(other.mPositions)
+        , mMin(std::numeric_limits<Real>::max())
+        , mMax(-std::numeric_limits<Real>::max()) {}
+
+    void operator()(const tbb::blocked_range<size_t>& range) {
+        Vec3R pos;
+        for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
+            mPositions.getPos(n, pos);
+            mMin = math::minComponent(mMin, pos);
+            mMax = math::maxComponent(mMax, pos);
+        }
+    }
+
+    void join(const CalculatePositionBounds& other) {
+        mMin = math::minComponent(mMin, other.mMin);
+        mMax = math::maxComponent(mMax, other.mMax);
+    }
+
+    void getBounds(Vec3R& min, Vec3R& max) {
+        min = mMin;
+        max = mMax;
+    }
+
+private:
+    const PositionArrayT& mPositions;
+    Vec3R mMin, mMax;
+};
 
 } // namespace point_conversion_internal
 
@@ -979,6 +1060,171 @@ convertPointDataGridGroup(  Group& group,
     group.finalize();
 }
 
+template<typename PositionWrapper, typename InterrupterT>
+inline float autoVoxelSize(const PositionWrapper& positions,
+                           const size_t pointsPerVoxel,
+                           InterrupterT* interrupter,
+                           Vec3R minBounds,
+                           Vec3R maxBounds,
+                           const math::Mat4d targetTransform,
+                           const Index decimalPlaces)
+{
+    using namespace point_conversion_internal;
+
+    struct Local {
+
+        static bool voxelSizeFromVolume(const double volume, const size_t estimatedVoxelCount, float& voxelSize)
+        {
+            // calculate the voxel size (along one axis)
+
+            if(volume == 0.0) return false;
+
+            double scaleFactor = static_cast<double>(estimatedVoxelCount) / volume;
+            scaleFactor = math::Pow(scaleFactor, 1.0/3.0);
+
+            if(scaleFactor == 0.0) return false;
+
+            voxelSize = (1.0 / scaleFactor);
+            return !math::isApproxZero(voxelSize);
+        }
+
+        static float truncate(const float voxelSize, Index decimalPlaces)
+        {
+            // get the first valid truncated result - never return 0
+
+            float truncatedVoxelSize = math::Truncate(voxelSize, decimalPlaces++);
+
+            while(truncatedVoxelSize == 0.0) {
+                truncatedVoxelSize = math::Truncate(voxelSize, decimalPlaces++);
+            }
+
+            return truncatedVoxelSize;
+        }
+    };
+
+    if(pointsPerVoxel == 0) OPENVDB_THROW(ValueError, "Points per voxel cannot be zero.");
+
+    // constructed with the default voxel size as specified by openvdb
+    // interface values
+
+    float voxelSize(0.1f);
+
+    const size_t numPoints = positions.size();
+
+    // return the default voxel size if we have zero or only 1 point
+
+    if(numPoints <= 1) return voxelSize;
+
+    // if the provided bounds are invalid, try to recompute
+
+    if(minBounds[0] > maxBounds[0] ||
+       minBounds[1] > maxBounds[1] ||
+       minBounds[2] > maxBounds[2])
+    {
+        tbb::blocked_range<size_t> range(0, numPoints);
+        CalculatePositionBounds<PositionWrapper> calculateBounds(positions);
+        tbb::parallel_reduce(range, calculateBounds);
+        calculateBounds.getBounds(minBounds, maxBounds);
+    }
+
+    // return default size if points all occupy the same space (on-top of each other)
+
+    if(minBounds == maxBounds) return voxelSize;
+
+    // if point lie along a plane in any direction, make sure we construct a valid volume
+
+    for(size_t i = 0; i < 3; ++i) {
+        if(!math::isApproxEqual(minBounds[i], maxBounds[i])) continue;
+        minBounds[i] -= voxelSize / 2.0f;
+        maxBounds[i] += voxelSize / 2.0f;
+    }
+
+    const Vec3R extents(maxBounds - minBounds);
+    double volume = extents[0] * extents[1] * extents[2];
+
+    const size_t estimatedVoxelCount(math::Max((numPoints / pointsPerVoxel), size_t(1)));
+    if(!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
+        OPENVDB_LOG_WARN("Unable to evaluate an automatic voxel size. Returning defaults.");
+        return 0.1f;
+    }
+
+    size_t previousVoxelCount(0);
+    size_t currentVoxelCount(1);
+
+    if(interrupter) interrupter->start("Calculating automatic voxel size");
+
+    while(currentVoxelCount > previousVoxelCount)
+    {
+        math::Transform::Ptr newTransform;
+
+        if(!math::isIdentity(targetTransform))
+        {
+            // if using a custom transform, pre-scale by coefficients
+            // which define the new voxel size
+
+            math::Mat4d newMat(targetTransform);
+            newMat.preScale(Vec3d(voxelSize) / math::getScale(newMat));
+            newTransform = math::Transform::createLinearTransform(newMat);
+        }
+        else
+        {
+            newTransform = math::Transform::createLinearTransform(voxelSize);
+        }
+
+        // create a mask grid of the points from the calculated voxel size
+        // this is the same function call as tools::createPointMask() which has
+        // been copied to provide an interrupter
+
+        MaskGrid::Ptr mask = createGrid<MaskGrid>(false);
+        mask->setTransform(newTransform);
+        tools::PointsToMask<MaskGrid, InterrupterT> pointMaskOp(*mask, interrupter);
+        pointMaskOp.addPoints(positions);
+
+        if(interrupter && util::wasInterrupted(interrupter)) break;
+
+        previousVoxelCount = currentVoxelCount;
+        currentVoxelCount = mask->activeVoxelCount();
+        const double newVolume = math::Pow3(voxelSize) * currentVoxelCount;
+
+        // stop if no change in the volume or the volume has increased
+
+        if(newVolume >= volume) break;
+        volume = newVolume;
+
+        const float previousVoxelSize = voxelSize;
+
+        // if the voxel size is invalid (too close to zero) return the previous size
+
+        if(!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
+            voxelSize = previousVoxelSize;
+            break;
+        }
+
+        // if the new voxel size has changed by less than 10% of its original value
+        // then halt the iterative calculation to avoid infinite looping
+        // as we are approaching a solution
+
+        if(voxelSize / previousVoxelSize > 0.9f) break;
+    }
+
+    if(interrupter) interrupter->end();
+
+    // round the voxel size and return
+
+    return Local::truncate(voxelSize, decimalPlaces);
+}
+
+template<typename PositionWrapper>
+inline float
+autoVoxelSize(  const PositionWrapper& positions,
+                const size_t pointsPerVoxel,
+                Vec3R minBounds,
+                Vec3R maxBounds,
+                const math::Mat4d targetTransform,
+                const Index decimalPlaces)
+{
+    return autoVoxelSize<PositionWrapper, util::NullInterrupter>(positions, pointsPerVoxel, NULL, minBounds, maxBounds, targetTransform, decimalPlaces);
+}
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME
