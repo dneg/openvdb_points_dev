@@ -9,6 +9,7 @@ FIND_PACKAGE ( OpenGL REQUIRED )
 FIND_PACKAGE ( Blosc REQUIRED )
 FIND_PACKAGE ( OpenVDB REQUIRED )
 FIND_PACKAGE ( Doxygen REQUIRED )
+FIND_PACKAGE ( Cppunit )
 
 INCLUDE_DIRECTORIES ( ${Boost_INCLUDE_DIR} )
 INCLUDE_DIRECTORIES ( ${ILMBASE_INCLUDE_DIRS} )
@@ -95,6 +96,23 @@ TARGET_LINK_LIBRARIES ( vdb_print
   ${OpenVDBPoints_LIBRARY}
   ${BLOSC_blosc_LIBRARY} 
   )
+
+# unit test runner (if cppunit is available)
+IF ( CPPUNIT_FOUND )
+  FILE ( GLOB UNITTEST_SOURCES unittest/*.cc )
+  SET_SOURCE_FILES_PROPERTIES ( ${UNITTEST_SOURCES}
+    PROPERTIES
+    COMPILE_FLAGS "-DOPENVDB_USE_BLOSC"
+  )
+  ADD_EXECUTABLE ( vdb_points_test ${UNITTEST_SOURCES} )
+  TARGET_LINK_LIBRARIES ( vdb_points_test
+    ${OpenVDB_LIBRARY}
+    ${OpenVDBPoints_LIBRARY}
+    ${BLOSC_blosc_LIBRARY}
+    ${CPPUNIT_LIBRARY}
+    )
+  ADD_TEST ( NAME vdb_points_test COMMAND vdb_points_test )
+ENDIF ( CPPUNIT_FOUND )
 
 # Doxygen docmentation
 FILE ( READ ${PROJECT_SOURCE_DIR}/doxygen-config DOXYGEN_CONFIG_CONTENT )
