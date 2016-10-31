@@ -79,7 +79,9 @@ enum COMPRESSION_TYPE
 {
     NONE = 0,
     TRUNCATE,
-    UNIT_VECTOR
+    UNIT_VECTOR,
+    SIGNED_FIXED_POINT_8,
+    UNSIGNED_FIXED_POINT_8,
 };
 
 template <typename AttributeType, typename HoudiniOffsetAttribute>
@@ -181,6 +183,14 @@ convertAttributeFromHoudini(PointDataTree& tree, const PointIndexTree& indexTree
                 convertAttributeFromHoudini<TypedAttributeArray<float,
                                             TruncateCodec>, false>(tree, indexTree, name, attribute, defaults);
             }
+            else if (compression == SIGNED_FIXED_POINT_8) {
+                convertAttributeFromHoudini<TypedAttributeArray<float,
+                                            FixedPointCodec<true, SignedUnitRange> >, false>(tree, indexTree, name, attribute, defaults);
+            }
+            else if (compression == UNSIGNED_FIXED_POINT_8) {
+                convertAttributeFromHoudini<TypedAttributeArray<float,
+                                            FixedPointCodec<true, UnsignedUnitRange> >, false>(tree, indexTree, name, attribute, defaults);
+            }
         }
         else if (storage == GA_STORE_REAL64) {
             convertAttributeFromHoudini<TypedAttributeArray<double>, false>(tree, indexTree, name, attribute, defaults);
@@ -240,6 +250,14 @@ convertAttributeFromHoudini(PointDataTree& tree, const PointIndexTree& indexTree
     else if (storage == GA_STORE_REAL32 && compression == TRUNCATE) {
         convertAttributeFromHoudini<TypedAttributeArray<float,
                                     TruncateCodec>, true>(tree, indexTree, name, attribute, defaults, width);
+    }
+    else if (storage == GA_STORE_REAL32 && compression == SIGNED_FIXED_POINT_8) {
+        convertAttributeFromHoudini<TypedAttributeArray<float,
+                                    FixedPointCodec<true, SignedUnitRange> >, true>(tree, indexTree, name, attribute, defaults, width);
+    }
+    else if (storage == GA_STORE_REAL32 && compression == UNSIGNED_FIXED_POINT_8) {
+        convertAttributeFromHoudini<TypedAttributeArray<float,
+                                    FixedPointCodec<true, UnsignedUnitRange> >, true>(tree, indexTree, name, attribute, defaults, width);
     }
     else if (storage == GA_STORE_REAL64) {
         convertAttributeFromHoudini<TypedAttributeArray<double>, true>(tree, indexTree, name, attribute, defaults, width);
@@ -654,6 +672,8 @@ newSopOperator(OP_OperatorTable* table)
             "none", "None",
             "truncate", "16-bit Truncate",
             UnitVecCodec::name(), "Unit Vector",
+            FixedPointCodec<true, SignedUnitRange>::name(), "8-bit Fixed Point (Signed Unit Range)",
+            FixedPointCodec<true, UnsignedUnitRange>::name(), "8-bit Fixed Point (Unsigned Unit Range)",
             NULL
         };
 
@@ -924,9 +944,21 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
                                 valueCompression = NONE;
                                 addWarning(SOP_MESSAGE, ss.str().c_str());
                             }
-                            if (valueCompression == UNIT_VECTOR && storage != GA_STORE_REAL32 && width != 3) {
+                            if (valueCompression == UNIT_VECTOR && (storage != GA_STORE_REAL32 || width != 3)) {
                                 std::stringstream ss; ss << "Unit Vector value compression only supported for vector 3 x 32-bit floating-point attributes. "
                                                             "Disabling compression for attribute \"" << attributeName << "\".";
+                                valueCompression = NONE;
+                                addWarning(SOP_MESSAGE, ss.str().c_str());
+                            }
+                            if (valueCompression == SIGNED_FIXED_POINT_8 && (storage != GA_STORE_REAL32 || width != 1)) {
+                                std::stringstream ss; ss << "Signed Fixed Point value compression only supported for scalar 32-bit floating-point attributes. "
+                                                        "Disabling compression for attribute \"" << attributeName << "\".";
+                                valueCompression = NONE;
+                                addWarning(SOP_MESSAGE, ss.str().c_str());
+                            }
+                            if (valueCompression == UNSIGNED_FIXED_POINT_8 && (storage != GA_STORE_REAL32 || width != 1)) {
+                                std::stringstream ss; ss << "Unsigned Fixed Point value compression only supported for scalar 32-bit floating-point attributes. "
+                                                        "Disabling compression for attribute \"" << attributeName << "\".";
                                 valueCompression = NONE;
                                 addWarning(SOP_MESSAGE, ss.str().c_str());
                             }
