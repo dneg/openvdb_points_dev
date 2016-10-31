@@ -858,18 +858,13 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
 
         if(evalInt("automatic", 0, time))
         {
+            using HoudiniPositionAttribute = hvdbp::HoudiniReadAttribute<openvdb::Vec3R>;
+
             UT_BoundingBox bbox;
             if (!ptGeo->getPointBBox(&bbox)) {
                 addError(SOP_MESSAGE, "Unable to get valid bounding box");
                 return error();
             }
-
-            const openvdb::Vec3R min(bbox.xmin(), bbox.ymin(), bbox.zmin());
-            const openvdb::Vec3R max(bbox.xmax(), bbox.ymax(), bbox.zmax());
-
-            const int pointsPerVoxel = evalInt("pointspervoxel", 0, time);
-
-            hvdbp::HoudiniReadAttribute<openvdb::Vec3R> positions(*(ptGeo->getP()));
 
             math::Mat4d matrix(math::Mat4d::identity());
 
@@ -878,7 +873,15 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
                 matrix = affineMap->getMat4();
             }
 
-            const float voxelSize = openvdb::tools::autoVoxelSize(positions, pointsPerVoxel, &mBoss, min, max, matrix);
+            const openvdb::BBoxd bounds(openvdb::Vec3R(bbox.xmin(), bbox.ymin(), bbox.zmin()),
+                                        openvdb::Vec3R(bbox.xmax(), bbox.ymax(), bbox.zmax()));
+
+            const int pointsPerVoxel = evalInt("pointspervoxel", 0, time);
+            HoudiniPositionAttribute positions(*(ptGeo->getP()));
+
+            const float voxelSize = openvdb::tools::autoVoxelSize<HoudiniPositionAttribute, hvdb::Interrupter>(
+                    positions, pointsPerVoxel, bounds, matrix, /*rounding*/ 5, &mBoss);
+
             matrix.preScale(Vec3d(voxelSize) / math::getScale(matrix));
             transform = Transform::createLinearTransform(matrix);
         }

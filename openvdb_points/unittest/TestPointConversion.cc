@@ -568,9 +568,6 @@ TestPointConversion::testAutoVoxelSize()
 
     AttributeWrapper<Vec3f> position(/*stride*/1);
 
-    static const Vec3R min(-std::numeric_limits<Real>::max());
-    static const Vec3R max(std::numeric_limits<Real>::max());
-
     // test with no positions
 
     {
@@ -608,13 +605,13 @@ TestPointConversion::testAutoVoxelSize()
 
         // test decimal place accuracy
 
-        voxelSize = autoVoxelSize(position, /*points per voxel*/1, max, min, math::Mat4d::identity(), 10);
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 10);
         CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 5.5130610466f, /*tolerance=*/1e-9);
 
-        voxelSize = autoVoxelSize(position, /*points per voxel*/1, max, min, math::Mat4d::identity(), 1);
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 1);
         CPPUNIT_ASSERT_EQUAL(voxelSize, 5.5f);
 
-        voxelSize = autoVoxelSize(position, /*points per voxel*/1, max, min, math::Mat4d::identity(), 0);
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 0);
         CPPUNIT_ASSERT_EQUAL(voxelSize, 6.0f);
     }
 
@@ -697,7 +694,7 @@ TestPointConversion::testAutoVoxelSize()
 
         // check zero decimal place still returns valid result
 
-        voxelSize = autoVoxelSize(position, /*points per voxel*/1, max, min, math::Mat4d::identity(), 0);
+        voxelSize = autoVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 0);
         CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize, 5e-5, /*tolerance=*/1e-6);
     }
 
@@ -833,8 +830,8 @@ TestPointConversion::testAutoVoxelSize()
         math::AffineMap::ConstPtr affineMap1 = scaleMap1->getAffineMap();
         math::AffineMap::ConstPtr affineMap2 = scaleMap2->getAffineMap();
 
-        float voxelSize1 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap1->getMat4());
-        float voxelSize2 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap2->getMat4());
+        float voxelSize1 = autoVoxelSize(position, /*points per voxel*/2, affineMap1->getMat4());
+        float voxelSize2 = autoVoxelSize(position, /*points per voxel*/2, affineMap2->getMat4());
         CPPUNIT_ASSERT_EQUAL(voxelSize1, voxelSize2);
 
         // test that applying a rotation roughly calculates to the same result for this example
@@ -849,7 +846,7 @@ TestPointConversion::testAutoVoxelSize()
         affineMap1 = transform1->constMap<math::AffineMap>();
         CPPUNIT_ASSERT(affineMap1.get());
 
-        float voxelSize3 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap1->getMat4());
+        float voxelSize3 = autoVoxelSize(position, /*points per voxel*/2, affineMap1->getMat4());
         CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize1, voxelSize3, 0.1);
 
         // test that applying a translation roughly calculates to the same result for this example
@@ -858,7 +855,7 @@ TestPointConversion::testAutoVoxelSize()
         affineMap1 = transform1->constMap<math::AffineMap>();
         CPPUNIT_ASSERT(affineMap1.get());
 
-        float voxelSize4 = autoVoxelSize(position, /*points per voxel*/2, max, min, affineMap1->getMat4());
+        float voxelSize4 = autoVoxelSize(position, /*points per voxel*/2, affineMap1->getMat4());
         CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize1, voxelSize4, 0.1);
     }
 }
