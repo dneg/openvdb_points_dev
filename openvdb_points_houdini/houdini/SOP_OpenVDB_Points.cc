@@ -856,7 +856,7 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
             transform = refPrim->getGrid().transform().copy();
         }
 
-        if(evalInt("automatic", 0, time))
+        if (evalInt("automatic", 0, time))
         {
             using HoudiniPositionAttribute = hvdbp::HoudiniReadAttribute<openvdb::Vec3R>;
 
@@ -885,7 +885,7 @@ SOP_OpenVDB_Points::cookMySop(OP_Context& context)
             matrix.preScale(Vec3d(voxelSize) / math::getScale(matrix));
             transform = Transform::createLinearTransform(matrix);
         }
-        else if(!transform)
+        else if (!transform)
         {
             transform = Transform::createLinearTransform(evalFloat("voxelsize", 0, time));
         }

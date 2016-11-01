@@ -594,7 +594,7 @@ TestPointConversion::testAutoVoxelSize()
         positionHandle.set(0, 0, Vec3f(-8.6f, 0.0f,-23.8f));
         positionHandle.set(1, 0, Vec3f( 8.6f, 7.8f, 23.8f));
 
-        for(size_t i = 2; i < 7; ++ i)
+        for (size_t i = 2; i < 7; ++ i)
             positionHandle.set(i, 0, Vec3f(0.0f));
 
         float voxelSize = autoVoxelSize(position, /*points per voxel*/8);
@@ -677,7 +677,7 @@ TestPointConversion::testAutoVoxelSize()
         AttributeWrapper<Vec3f>::Handle positionHandle(position);
         positionHandle.set(0, 0, Vec3f(0.0f));
 
-        for(size_t i = 1; i < 100000; ++ i)
+        for (size_t i = 1; i < 100000; ++ i)
             positionHandle.set(i, 0, Vec3f(smallest * i));
 
         float voxelSize = autoVoxelSize(position, /*points per voxel*/10);
@@ -712,14 +712,14 @@ TestPointConversion::testAutoVoxelSize()
 
         // positions between -0.5 and 0.5
 
-        for(size_t i = 0; i < 1000; ++ i) {
+        for (size_t i = 0; i < 1000; ++ i) {
             const Vec3f pos(randNumber() - 0.5f);
             positionHandle.set(i, 0, pos);
         }
 
         // positions between 19.5 and 20.5
 
-        for(size_t i = 1000; i < 2000; ++ i) {
+        for (size_t i = 1000; i < 2000; ++ i) {
             const Vec3f pos(randNumber() - 0.5f + 20.0f);
             positionHandle.set(i, 0, pos);
         }
@@ -747,21 +747,21 @@ TestPointConversion::testAutoVoxelSize()
 
         // positions between 0 and 1
 
-        for(size_t i = 0; i < 1000; ++ i) {
+        for (size_t i = 0; i < 1000; ++ i) {
             const Vec3f pos(randNumber());
             positionHandle.set(i, 0, pos);
         }
 
         // positions between 10 and 20
 
-        for(size_t i = 1000; i < 2000; ++ i) {
+        for (size_t i = 1000; i < 2000; ++ i) {
             const Vec3f pos((randNumber() * 10.0f) + 10.0f);
             positionHandle.set(i, 0, pos);
         }
 
         // positions between 50 and 100
 
-        for(size_t i = 2000; i < 3000; ++ i) {
+        for (size_t i = 2000; i < 3000; ++ i) {
             const Vec3f pos((randNumber() * 50.0f) + 50.0f);
             positionHandle.set(i, 0, pos);
         }

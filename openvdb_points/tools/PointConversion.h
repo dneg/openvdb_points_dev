@@ -1079,12 +1079,12 @@ inline float autoVoxelSize(const PositionWrapper& positions,
         {
             // calculate the voxel size (along one axis)
 
-            if(volume == 0.0) return false;
+            if (volume == 0.0) return false;
 
             double scaleFactor = static_cast<double>(estimatedVoxelCount) / volume;
             scaleFactor = math::Pow(scaleFactor, 1.0/3.0);
 
-            if(scaleFactor == 0.0) return false;
+            if (scaleFactor == 0.0) return false;
 
             voxelSize = (1.0 / scaleFactor);
             return !math::isApproxZero(voxelSize);
@@ -1096,7 +1096,7 @@ inline float autoVoxelSize(const PositionWrapper& positions,
 
             float truncatedVoxelSize = math::Truncate(voxelSize, decimalPlaces++);
 
-            while(truncatedVoxelSize == 0.0) {
+            while (truncatedVoxelSize == 0.0) {
                 truncatedVoxelSize = math::Truncate(voxelSize, decimalPlaces++);
             }
 
@@ -1104,7 +1104,7 @@ inline float autoVoxelSize(const PositionWrapper& positions,
         }
     };
 
-    if(pointsPerVoxel == 0) OPENVDB_THROW(ValueError, "Points per voxel cannot be zero.");
+    if (pointsPerVoxel == 0) OPENVDB_THROW(ValueError, "Points per voxel cannot be zero.");
 
     // constructed with the default voxel size as specified by openvdb interface values
 
@@ -1114,7 +1114,7 @@ inline float autoVoxelSize(const PositionWrapper& positions,
 
     // return the default voxel size if we have zero or only 1 point
 
-    if(numPoints <= 1) return voxelSize;
+    if (numPoints <= 1) return voxelSize;
 
     // return default size if points all occupy the same space (on-top of each other)
 
@@ -1122,8 +1122,8 @@ inline float autoVoxelSize(const PositionWrapper& positions,
 
     // if point lie along a plane in any direction, make sure we construct a valid volume
 
-    for(size_t i = 0; i < 3; ++i) {
-        if(!math::isApproxEqual(wsBoundingBox.min()[i], wsBoundingBox.max()[i])) continue;
+    for (size_t i = 0; i < 3; ++i) {
+        if (!math::isApproxEqual(wsBoundingBox.min()[i], wsBoundingBox.max()[i])) continue;
         wsBoundingBox.min()[i] -= voxelSize / 2.0f;
         wsBoundingBox.max()[i] += voxelSize / 2.0f;
     }
@@ -1131,7 +1131,7 @@ inline float autoVoxelSize(const PositionWrapper& positions,
     double volume = wsBoundingBox.volume();
 
     const size_t estimatedVoxelCount(math::Max((numPoints / pointsPerVoxel), size_t(1)));
-    if(!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
+    if (!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
         OPENVDB_LOG_WARN("Unable to evaluate an automatic voxel size. Returning defaults.");
         return 0.1f;
     }
@@ -1139,13 +1139,13 @@ inline float autoVoxelSize(const PositionWrapper& positions,
     size_t previousVoxelCount(0);
     size_t currentVoxelCount(1);
 
-    if(interrupter) interrupter->start("Calculating automatic voxel size");
+    if (interrupter) interrupter->start("Calculating automatic voxel size");
 
-    while(currentVoxelCount > previousVoxelCount)
+    while (currentVoxelCount > previousVoxelCount)
     {
         math::Transform::Ptr newTransform;
 
-        if(!math::isIdentity(targetTransform))
+        if (!math::isIdentity(targetTransform))
         {
             // if using a custom transform, pre-scale by coefficients
             // which define the new voxel size
@@ -1168,7 +1168,7 @@ inline float autoVoxelSize(const PositionWrapper& positions,
         tools::PointsToMask<MaskGrid, InterrupterT> pointMaskOp(*mask, interrupter);
         pointMaskOp.addPoints(positions);
 
-        if(interrupter && util::wasInterrupted(interrupter)) break;
+        if (interrupter && util::wasInterrupted(interrupter)) break;
 
         previousVoxelCount = currentVoxelCount;
         currentVoxelCount = mask->activeVoxelCount();
@@ -1176,14 +1176,14 @@ inline float autoVoxelSize(const PositionWrapper& positions,
 
         // stop if no change in the volume or the volume has increased
 
-        if(newVolume >= volume) break;
+        if (newVolume >= volume) break;
         volume = newVolume;
 
         const float previousVoxelSize = voxelSize;
 
         // if the voxel size is invalid (too close to zero) return the previous size
 
-        if(!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
+        if (!Local::voxelSizeFromVolume(volume, estimatedVoxelCount, voxelSize)) {
             voxelSize = previousVoxelSize;
             break;
         }
@@ -1192,10 +1192,10 @@ inline float autoVoxelSize(const PositionWrapper& positions,
         // then halt the iterative calculation to avoid infinite looping
         // as we are approaching a solution
 
-        if(voxelSize / previousVoxelSize > 0.9f) break;
+        if (voxelSize / previousVoxelSize > 0.9f) break;
     }
 
-    if(interrupter) interrupter->end();
+    if (interrupter) interrupter->end();
 
     // round the voxel size and return
 
