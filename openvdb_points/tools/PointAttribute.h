@@ -52,24 +52,13 @@ OPENVDB_USE_VERSION_NAMESPACE
 namespace OPENVDB_VERSION_NAME {
 namespace tools {
 
-/// @brief Appends a new attribute to the VDB tree.
-///
-/// @param tree          the PointDataTree to be appended to.
-/// @param name          name for the new attribute.
-/// @param stride        the stride of the attribute
-/// @param uniformValue  the initial value of the attribute
-/// @param defaultValue  metadata default attribute value
-/// @param hidden        mark attribute as hidden
-/// @param transient     mark attribute as transient
-template <typename AttributeType, typename PointDataTree>
-inline void appendAttribute(PointDataTree& tree,
-                            const Name& name,
-                            const Index stride = 1,
-                            const typename AttributeType::ValueType& uniformValue =
-                                                zeroVal<typename AttributeType::ValueType>(),
-                            Metadata::Ptr defaultValue = Metadata::Ptr(),
-                            const bool hidden = false,
-                            const bool transient = false);
+namespace point_attribute_internal {
+
+template <typename ValueType>
+struct DefaultValue;
+
+} // namespace point_attribute_internal
+
 
 /// @brief Appends a new attribute to the VDB tree
 /// (this method does not require a templated AttributeType)
@@ -90,16 +79,50 @@ inline void appendAttribute(PointDataTree& tree,
                             const bool hidden = false,
                             const bool transient = false);
 
+/// @brief Appends a new attribute to the VDB tree.
+///
+/// @param tree          the PointDataTree to be appended to.
+/// @param name          name for the new attribute.
+/// @param stride        the stride of the attribute
+/// @param defaultValue  metadata default attribute value
+/// @param hidden        mark attribute as hidden
+/// @param transient     mark attribute as transient
+template <typename ValueType, typename CodecType, typename PointDataTree>
+inline void appendAttribute(PointDataTree& tree,
+                            const std::string& name,
+                            const ValueType& uniformValue = zeroVal<ValueType>(),
+                            const Index stride = 1,
+                            Metadata::Ptr defaultValue = Metadata::Ptr(),
+                            const bool hidden = false,
+                            const bool transient = false);
+
+/// @brief Appends a new attribute to the VDB tree.
+///
+/// @param tree          the PointDataTree to be appended to.
+/// @param name          name for the new attribute.
+/// @param uniformValue  the initial value of the attribute
+/// @param stride        the stride of the attribute
+/// @param defaultValue  metadata default attribute value
+/// @param hidden        mark attribute as hidden
+/// @param transient     mark attribute as transient
+template <typename ValueType, typename PointDataTree>
+inline void appendAttribute(PointDataTree& tree,
+                            const std::string& name,
+                            const ValueType& uniformValue = zeroVal<ValueType>(),
+                            const Index stride = 1,
+                            Metadata::Ptr defaultValue = Metadata::Ptr(),
+                            const bool hidden = false,
+                            const bool transient = false);
+
 /// @brief Collapse the attribute into a uniform value
 ///
 /// @param tree         the PointDataTree in which to collapse the attribute.
 /// @param name         name for the attribute.
 /// @param uniformValue value of the attribute
-template <typename AttributeType, typename PointDataTree>
+template <typename ValueType, typename PointDataTree>
 inline void collapseAttribute(  PointDataTree& tree,
                                 const Name& name,
-                                const typename AttributeType::ValueType& uniformValue =
-                                                    zeroVal<typename AttributeType::ValueType>());
+                                const ValueType& uniformValue = zeroVal<ValueType>());
 
 /// @brief Drops attributes from the VDB tree.
 ///
@@ -223,7 +246,7 @@ struct AppendAttributeOp {
 ////////////////////////////////////////
 
 
-template <typename AttributeType, typename PointDataTreeType>
+template <typename ValueType, typename PointDataTreeType>
 struct CollapseAttributeOp {
 
     using LeafManagerT  = typename tree::LeafManager<PointDataTreeType>;
@@ -231,7 +254,7 @@ struct CollapseAttributeOp {
 
     CollapseAttributeOp(PointDataTreeType& tree,
                         const size_t pos,
-                        const typename AttributeType::ValueType& uniformValue)
+                        const ValueType& uniformValue)
         : mTree(tree)
         , mPos(pos)
         , mUniformValue(uniformValue) { }
@@ -241,7 +264,8 @@ struct CollapseAttributeOp {
         for (auto leaf = range.begin(); leaf; ++leaf) {
             assert(leaf->hasAttribute(mPos));
             AttributeArray& array = leaf->attributeArray(mPos);
-            AttributeType::collapse(&array, mUniformValue);
+            AttributeWriteHandle<ValueType> handle(array);
+            handle.collapse(mUniformValue);
         }
     }
 
@@ -249,7 +273,7 @@ struct CollapseAttributeOp {
 
     PointDataTreeType&                          mTree;
     const size_t                                mPos;
-    const typename AttributeType::ValueType     mUniformValue;
+    const ValueType                             mUniformValue;
 }; // class CollapseAttributeOp
 
 
@@ -339,6 +363,23 @@ struct BloscCompressAttributesOp {
 }; // class BloscCompressAttributesOp
 
 
+////////////////////////////////////////
+
+
+template <typename ValueType, typename CodecType>
+struct AttributeTypeConversion
+{
+    static const NamePair& type() { return TypedAttributeArray<ValueType, CodecType>::attributeType(); }
+};
+
+
+template <typename CodecType>
+struct AttributeTypeConversion<Name, CodecType>
+{
+    static const NamePair& type() { return StringAttributeArray::attributeType(); }
+};
+
+
 } // namespace point_attribute_internal
 
 
@@ -396,19 +437,25 @@ inline void appendAttribute(PointDataTree& tree,
 ////////////////////////////////////////
 
 
-template <typename AttributeType, typename PointDataTree>
+template <typename ValueType, typename CodecType, typename PointDataTree>
 inline void appendAttribute(PointDataTree& tree,
-                            const Name& name,
+                            const std::string& name,
+                            const ValueType& uniformValue,
                             const Index stride,
-                            const typename AttributeType::ValueType& uniformValue,
                             Metadata::Ptr defaultValue,
                             const bool hidden,
                             const bool transient)
 {
+    using point_attribute_internal::AttributeTypeConversion;
+    using point_attribute_internal::DefaultValue;
+    using point_attribute_internal::MetadataStorage;
+
+    using AttributeType = TypedAttributeArray<ValueType, CodecType>;
+
     appendAttribute(tree, name, AttributeType::attributeType(), stride, defaultValue, hidden, transient);
 
-    if (uniformValue != zeroVal<typename AttributeType::ValueType>()) {
-        collapseAttribute<AttributeType>(tree, name, uniformValue);
+    if (uniformValue != zeroVal<ValueType>()) {
+        collapseAttribute<ValueType>(tree, name, uniformValue);
     }
 }
 
@@ -416,10 +463,26 @@ inline void appendAttribute(PointDataTree& tree,
 ////////////////////////////////////////
 
 
-template <typename AttributeType, typename PointDataTree>
+template <typename ValueType, typename PointDataTree>
+inline void appendAttribute(PointDataTree& tree,
+                            const std::string& name,
+                            const ValueType& uniformValue,
+                            const Index stride,
+                            Metadata::Ptr defaultValue,
+                            const bool hidden,
+                            const bool transient)
+{
+    appendAttribute<ValueType, NullCodec>(tree, name, uniformValue, stride, defaultValue, hidden, transient);
+}
+
+
+////////////////////////////////////////
+
+
+template <typename ValueType, typename PointDataTree>
 inline void collapseAttribute(  PointDataTree& tree,
                                 const Name& name,
-                                const typename AttributeType::ValueType& uniformValue)
+                                const ValueType& uniformValue)
 {
     using LeafManagerT  = typename tree::LeafManager<PointDataTree>;
     using Descriptor    = AttributeSet::Descriptor;
@@ -441,7 +504,7 @@ inline void collapseAttribute(  PointDataTree& tree,
     }
 
     LeafManagerT leafManager(tree);
-    tbb::parallel_for(leafManager.leafRange(), CollapseAttributeOp<AttributeType, PointDataTree>(tree, index, uniformValue));
+    tbb::parallel_for(leafManager.leafRange(), CollapseAttributeOp<ValueType, PointDataTree>(tree, index, uniformValue));
 }
 
 
