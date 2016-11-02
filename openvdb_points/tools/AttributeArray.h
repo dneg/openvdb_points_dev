@@ -410,19 +410,10 @@ struct PositionRange
 };
 
 
-// Fixed-point codec range for signed values in the unit range [-1.0,1.0]
-struct SignedUnitRange
-{
-    static const char* name() { return "snfxpt"; }
-    template <typename ValueType> static ValueType encode(const ValueType& value) { return (value + ValueType(1.0)) / ValueType(2.0); }
-    template <typename ValueType> static ValueType decode(const ValueType& value) { return (value * ValueType(2.0)) - ValueType(1.0); }
-};
-
-
 // Fixed-point codec range for unsigned values in the unit range [0.0,1.0]
-struct UnsignedUnitRange
+struct UnitRange
 {
-    static const char* name() { return "unfxpt"; }
+    static const char* name() { return "ufxpt"; }
     template <typename ValueType> static ValueType encode(const ValueType& value) { return value; }
     template <typename ValueType> static ValueType decode(const ValueType& value) { return value; }
 };
