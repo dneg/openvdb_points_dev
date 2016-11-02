@@ -67,7 +67,6 @@ CPPUNIT_TEST_SUITE_REGISTRATION(TestPointAttribute);
 void
 TestPointAttribute::testAppendDrop()
 {
-    using AttributeF = TypedAttributeArray<float>;
     using AttributeI = TypedAttributeArray<int>;
 
     std::vector<Vec3s> positions{{1, 1, 1}, {1, 10, 1}, {10, 1, 1}, {10, 10, 1}};
@@ -306,9 +305,6 @@ TestPointAttribute::testAppendDrop()
 void
 TestPointAttribute::testRename()
 {
-    using AttributeF = TypedAttributeArray<float>;
-    using AttributeI = TypedAttributeArray<int>;
-
     std::vector<Vec3s> positions{{1, 1, 1}, {1, 10, 1}, {10, 1, 1}, {10, 10, 1}};
 
     const float voxelSize(1.0);
@@ -378,8 +374,6 @@ TestPointAttribute::testRename()
 void
 TestPointAttribute::testBloscCompress()
 {
-    using AttributeI = TypedAttributeArray<int>;
-
     std::vector<Vec3s> positions;
     for (float i = 1; i < 6; i+= 0.1) {
         positions.emplace_back(1, i, 1);

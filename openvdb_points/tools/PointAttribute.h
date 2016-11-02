@@ -444,10 +444,10 @@ struct DefaultValue<Name>
 template <typename PointDataTree, typename ValueType>
 struct MetadataStorage
 {
-    static void add(PointDataTree& tree, const ValueType& uniformValue) { }
+    static void add(PointDataTree&, const ValueType&) { }
 
     template <typename Iter>
-    static void add(PointDataTree& tree, Iter begin, Iter end) { }
+    static void add(PointDataTree&, Iter, Iter) { }
 };
 
 
