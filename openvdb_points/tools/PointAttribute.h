@@ -90,7 +90,8 @@ inline void appendAttribute(PointDataTree& tree,
 template <typename ValueType, typename CodecType, typename PointDataTree>
 inline void appendAttribute(PointDataTree& tree,
                             const std::string& name,
-                            const ValueType& uniformValue = zeroVal<ValueType>(),
+                            const ValueType& uniformValue =
+                                point_attribute_internal::DefaultValue<ValueType>::value(),
                             const Index stride = 1,
                             Metadata::Ptr defaultValue = Metadata::Ptr(),
                             const bool hidden = false,
@@ -108,7 +109,8 @@ inline void appendAttribute(PointDataTree& tree,
 template <typename ValueType, typename PointDataTree>
 inline void appendAttribute(PointDataTree& tree,
                             const std::string& name,
-                            const ValueType& uniformValue = zeroVal<ValueType>(),
+                            const ValueType& uniformValue =
+                                point_attribute_internal::DefaultValue<ValueType>::value(),
                             const Index stride = 1,
                             Metadata::Ptr defaultValue = Metadata::Ptr(),
                             const bool hidden = false,
@@ -122,7 +124,8 @@ inline void appendAttribute(PointDataTree& tree,
 template <typename ValueType, typename PointDataTree>
 inline void collapseAttribute(  PointDataTree& tree,
                                 const Name& name,
-                                const ValueType& uniformValue = zeroVal<ValueType>());
+                                const ValueType& uniformValue =
+                                    point_attribute_internal::DefaultValue<ValueType>::value());
 
 /// @brief Drops attributes from the VDB tree.
 ///
@@ -280,6 +283,44 @@ struct CollapseAttributeOp {
 ////////////////////////////////////////
 
 
+template <typename PointDataTreeType>
+struct CollapseAttributeOp<Name, PointDataTreeType> {
+
+    using LeafManagerT  = typename tree::LeafManager<PointDataTreeType>;
+    using LeafRangeT    = typename LeafManagerT::LeafRange;
+
+    CollapseAttributeOp(PointDataTreeType& tree,
+                        const size_t pos,
+                        const Name& uniformValue)
+        : mTree(tree)
+        , mPos(pos)
+        , mUniformValue(uniformValue) { }
+
+    void operator()(const LeafRangeT& range) const {
+
+        for (auto leaf = range.begin(); leaf; ++leaf) {
+            assert(leaf->hasAttribute(mPos));
+            AttributeArray& array = leaf->attributeArray(mPos);
+
+            const AttributeSet::Descriptor& descriptor = leaf->attributeSet().descriptor();
+            const MetaMap& metadata = descriptor.getMetadata();
+
+            StringAttributeWriteHandle handle(array, metadata);
+            handle.collapse(mUniformValue);
+        }
+    }
+
+    //////////
+
+    PointDataTreeType&                          mTree;
+    const size_t                                mPos;
+    const Name                                  mUniformValue;
+}; // class CollapseAttributeOp
+
+
+////////////////////////////////////////
+
+
 template<typename PointDataTreeType>
 struct DropAttributesOp {
 
@@ -380,6 +421,59 @@ struct AttributeTypeConversion<Name, CodecType>
 };
 
 
+////////////////////////////////////////
+
+
+template <typename ValueType>
+struct DefaultValue
+{
+    static constexpr ValueType value() { return zeroVal<ValueType>(); }
+};
+
+
+template <>
+struct DefaultValue<Name>
+{
+    static Name value() { return ""; }
+};
+
+
+////////////////////////////////////////
+
+
+template <typename PointDataTree, typename ValueType>
+struct MetadataStorage
+{
+    static void add(PointDataTree& tree, const ValueType& uniformValue) { }
+
+    template <typename Iter>
+    static void add(PointDataTree& tree, Iter begin, Iter end) { }
+};
+
+
+template <typename PointDataTree>
+struct MetadataStorage<PointDataTree, Name>
+{
+    static void add(PointDataTree& tree, const Name& uniformValue) {
+        auto newDescriptor = makeDescriptorUnique(tree);
+        MetaMap& metadata = newDescriptor->getMetadata();
+        StringMetaInserter inserter(metadata);
+        inserter.insert(uniformValue);
+    }
+
+    template <typename Iter>
+    static void add(PointDataTree& tree, Iter begin, Iter end) {
+        auto newDescriptor = makeDescriptorUnique(tree);
+        MetaMap& metadata = newDescriptor->getMetadata();
+        StringMetaInserter inserter(metadata);
+
+        for (Iter it = begin; it != end; ++it) {
+            inserter.insert(*it);
+        }
+    }
+};
+
+
 } // namespace point_attribute_internal
 
 
@@ -450,11 +544,10 @@ inline void appendAttribute(PointDataTree& tree,
     using point_attribute_internal::DefaultValue;
     using point_attribute_internal::MetadataStorage;
 
-    using AttributeType = TypedAttributeArray<ValueType, CodecType>;
+    appendAttribute(tree, name, AttributeTypeConversion<ValueType, CodecType>::type(), stride, defaultValue, hidden, transient);
 
-    appendAttribute(tree, name, AttributeType::attributeType(), stride, defaultValue, hidden, transient);
-
-    if (uniformValue != zeroVal<ValueType>()) {
+    if (uniformValue != DefaultValue<ValueType>::value()) {
+        MetadataStorage<PointDataTree, ValueType>::add(tree, uniformValue);
         collapseAttribute<ValueType>(tree, name, uniformValue);
     }
 }
