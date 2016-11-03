@@ -123,6 +123,15 @@ TestPointAttribute::testAppendDrop()
         CPPUNIT_ASSERT_EQUAL(AttributeI::cast(array3).get(0), AttributeI::ValueType(50));
 
         dropAttribute(tree, "id");
+
+        appendAttribute<Name>(tree, "name", "test");
+
+        AttributeArray& array4 = tree.beginLeaf()->attributeArray("name");
+        CPPUNIT_ASSERT(array4.isUniform());
+        StringAttributeHandle handle(array4, attributeSet.descriptor().getMetadata());
+        CPPUNIT_ASSERT_EQUAL(handle.get(0), Name("test"));
+
+        dropAttribute(tree, "name");
     }
 
     { // append a strided attribute
@@ -299,6 +308,20 @@ TestPointAttribute::testAppendDrop()
         CPPUNIT_ASSERT(!isString(arrayHidden));
         CPPUNIT_ASSERT(!isString(arrayTransient));
         CPPUNIT_ASSERT(isString(arrayString));
+    }
+
+    { // collapsing non-existing attribute throws exception
+        CPPUNIT_ASSERT_THROW(collapseAttribute<int>(tree, "unknown", 0), openvdb::KeyError);
+        CPPUNIT_ASSERT_THROW(collapseAttribute<Name>(tree, "unknown", "unknown"), openvdb::KeyError);
+    }
+
+    { // adding multiple values with MetadataStorage
+        std::vector<Name> names{"test1", "test2", "test3"};
+        const MetaMap& metadataBefore = attributeSet.descriptor().getMetadata();
+        size_t beforeCount = metadataBefore.metaCount();
+        point_attribute_internal::MetadataStorage<PointDataTree, Name>::add(tree, names.cbegin(), names.cend());
+        const MetaMap& metadataAfter = attributeSet.descriptor().getMetadata();
+        CPPUNIT_ASSERT_EQUAL(metadataAfter.metaCount() - beforeCount, names.size());
     }
 }
 

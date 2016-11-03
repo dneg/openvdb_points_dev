@@ -210,14 +210,12 @@ struct AppendAttributeOp {
     using LeafManagerT  = typename tree::LeafManager<PointDataTreeType>;
     using LeafRangeT    = typename LeafManagerT::LeafRange;
 
-    AppendAttributeOp(  PointDataTreeType& tree,
-                        AttributeSet::DescriptorPtr& descriptor,
+    AppendAttributeOp(  AttributeSet::DescriptorPtr& descriptor,
                         const size_t pos,
                         const Index stride = 1,
                         const bool hidden = false,
                         const bool transient = false)
-        : mTree(tree)
-        , mDescriptor(descriptor)
+        : mDescriptor(descriptor)
         , mPos(pos)
         , mStride(stride)
         , mHidden(hidden)
@@ -237,7 +235,6 @@ struct AppendAttributeOp {
 
     //////////
 
-    PointDataTreeType&              mTree;
     AttributeSet::DescriptorPtr&    mDescriptor;
     const size_t                    mPos;
     const Index                     mStride;
@@ -255,11 +252,9 @@ struct CollapseAttributeOp {
     using LeafManagerT  = typename tree::LeafManager<PointDataTreeType>;
     using LeafRangeT    = typename LeafManagerT::LeafRange;
 
-    CollapseAttributeOp(PointDataTreeType& tree,
-                        const size_t pos,
+    CollapseAttributeOp(const size_t pos,
                         const ValueType& uniformValue)
-        : mTree(tree)
-        , mPos(pos)
+        : mPos(pos)
         , mUniformValue(uniformValue) { }
 
     void operator()(const LeafRangeT& range) const {
@@ -274,7 +269,6 @@ struct CollapseAttributeOp {
 
     //////////
 
-    PointDataTreeType&                          mTree;
     const size_t                                mPos;
     const ValueType                             mUniformValue;
 }; // class CollapseAttributeOp
@@ -289,11 +283,9 @@ struct CollapseAttributeOp<Name, PointDataTreeType> {
     using LeafManagerT  = typename tree::LeafManager<PointDataTreeType>;
     using LeafRangeT    = typename LeafManagerT::LeafRange;
 
-    CollapseAttributeOp(PointDataTreeType& tree,
-                        const size_t pos,
+    CollapseAttributeOp(const size_t pos,
                         const Name& uniformValue)
-        : mTree(tree)
-        , mPos(pos)
+        : mPos(pos)
         , mUniformValue(uniformValue) { }
 
     void operator()(const LeafRangeT& range) const {
@@ -312,7 +304,6 @@ struct CollapseAttributeOp<Name, PointDataTreeType> {
 
     //////////
 
-    PointDataTreeType&                          mTree;
     const size_t                                mPos;
     const Name                                  mUniformValue;
 }; // class CollapseAttributeOp
@@ -328,11 +319,9 @@ struct DropAttributesOp {
     using LeafRangeT    = typename LeafManagerT::LeafRange;
     using Indices       = std::vector<size_t>;
 
-    DropAttributesOp(   PointDataTreeType& tree,
-                        const Indices& indices,
+    DropAttributesOp(   const Indices& indices,
                         AttributeSet::DescriptorPtr& descriptor)
-        : mTree(tree)
-        , mIndices(indices)
+        : mIndices(indices)
         , mDescriptor(descriptor) { }
 
     void operator()(const LeafRangeT& range) const {
@@ -347,7 +336,6 @@ struct DropAttributesOp {
 
     //////////
 
-    PointDataTreeType&              mTree;
     const Indices&                  mIndices;
     AttributeSet::DescriptorPtr&    mDescriptor;
 }; // class DropAttributesOp
@@ -380,10 +368,8 @@ struct BloscCompressAttributesOp {
     using LeafRangeT    = typename LeafManagerT::LeafRange;
     using Indices       = std::vector<size_t>;
 
-    BloscCompressAttributesOp(  PointDataTreeType& tree,
-                                const Indices& indices)
-        : mTree(tree)
-        , mIndices(indices) { }
+    BloscCompressAttributesOp(const Indices& indices)
+        : mIndices(indices) { }
 
     void operator()(const LeafRangeT& range) const {
 
@@ -399,7 +385,6 @@ struct BloscCompressAttributesOp {
 
     //////////
 
-    PointDataTreeType&              mTree;
     const Indices&                  mIndices;
 }; // class BloscCompressAttributesOp
 
@@ -455,16 +440,14 @@ template <typename PointDataTree>
 struct MetadataStorage<PointDataTree, Name>
 {
     static void add(PointDataTree& tree, const Name& uniformValue) {
-        auto newDescriptor = makeDescriptorUnique(tree);
-        MetaMap& metadata = newDescriptor->getMetadata();
+        MetaMap& metadata = makeDescriptorUnique(tree)->getMetadata();
         StringMetaInserter inserter(metadata);
         inserter.insert(uniformValue);
     }
 
     template <typename Iter>
     static void add(PointDataTree& tree, Iter begin, Iter end) {
-        auto newDescriptor = makeDescriptorUnique(tree);
-        MetaMap& metadata = newDescriptor->getMetadata();
+        MetaMap& metadata = makeDescriptorUnique(tree)->getMetadata();
         StringMetaInserter inserter(metadata);
 
         for (Iter it = begin; it != end; ++it) {
@@ -523,7 +506,7 @@ inline void appendAttribute(PointDataTree& tree,
     // insert attributes using the new descriptor
 
     tree::LeafManager<PointDataTree> leafManager(tree);
-    AppendAttributeOp<PointDataTree> append(tree, newDescriptor, pos, stride, hidden, transient);
+    AppendAttributeOp<PointDataTree> append(newDescriptor, pos, stride, hidden, transient);
     tbb::parallel_for(leafManager.leafRange(), append);
 }
 
@@ -540,6 +523,8 @@ inline void appendAttribute(PointDataTree& tree,
                             const bool hidden,
                             const bool transient)
 {
+    static_assert(!std::is_base_of<AttributeArray, ValueType>::value, "ValueType must not be derived from AttributeArray");
+
     using point_attribute_internal::AttributeTypeConversion;
     using point_attribute_internal::DefaultValue;
     using point_attribute_internal::MetadataStorage;
@@ -565,6 +550,8 @@ inline void appendAttribute(PointDataTree& tree,
                             const bool hidden,
                             const bool transient)
 {
+    static_assert(!std::is_base_of<AttributeArray, ValueType>::value, "ValueType must not be derived from AttributeArray");
+
     appendAttribute<ValueType, NullCodec>(tree, name, uniformValue, stride, defaultValue, hidden, transient);
 }
 
@@ -577,6 +564,8 @@ inline void collapseAttribute(  PointDataTree& tree,
                                 const Name& name,
                                 const ValueType& uniformValue)
 {
+    static_assert(!std::is_base_of<AttributeArray, ValueType>::value, "ValueType must not be derived from AttributeArray");
+
     using LeafManagerT  = typename tree::LeafManager<PointDataTree>;
     using Descriptor    = AttributeSet::Descriptor;
 
@@ -597,7 +586,7 @@ inline void collapseAttribute(  PointDataTree& tree,
     }
 
     LeafManagerT leafManager(tree);
-    tbb::parallel_for(leafManager.leafRange(), CollapseAttributeOp<ValueType, PointDataTree>(tree, index, uniformValue));
+    tbb::parallel_for(leafManager.leafRange(), CollapseAttributeOp<ValueType, PointDataTree>(index, uniformValue));
 }
 
 
@@ -630,7 +619,7 @@ inline void dropAttributes( PointDataTree& tree,
     // insert attributes using the new descriptor
 
     Descriptor::Ptr newDescriptor = descriptor.duplicateDrop(indices);
-    tbb::parallel_for(LeafManagerT(tree).leafRange(), DropAttributesOp<PointDataTree>(tree, indices, newDescriptor));
+    tbb::parallel_for(LeafManagerT(tree).leafRange(), DropAttributesOp<PointDataTree>(indices, newDescriptor));
 }
 
 
@@ -790,7 +779,7 @@ inline void bloscCompressAttribute( PointDataTree& tree,
 
     std::vector<size_t> indices{index};
 
-    tbb::parallel_for(LeafManagerT(tree).leafRange(), BloscCompressAttributesOp<PointDataTree>(tree, indices));
+    tbb::parallel_for(LeafManagerT(tree).leafRange(), BloscCompressAttributesOp<PointDataTree>(indices));
 }
 
 ////////////////////////////////////////

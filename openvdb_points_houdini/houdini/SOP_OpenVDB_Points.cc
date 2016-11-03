@@ -89,6 +89,9 @@ void
 convertSegmentsFromHoudini( PointDataTree& tree, const PointIndexTree& indexTree, const openvdb::Name& name,
                             const size_t count, HoudiniOffsetAttribute& houdiniOffsets)
 {
+    static_assert(!std::is_base_of<AttributeArray, ValueType>::value, "ValueType must not be derived from AttributeArray");
+    static_assert(!std::is_same<ValueType, openvdb::Name>::value, "ValueType must not be openvdb::Name/std::string");
+
     appendAttribute<ValueType>(tree, name, zeroVal<ValueType>(), count);
 
     populateAttribute<PointDataTree, PointIndexTree, HoudiniOffsetAttribute, true>(tree, indexTree, name, houdiniOffsets, count);
@@ -99,6 +102,9 @@ void
 convertAttributeFromHoudini(PointDataTree& tree, const PointIndexTree& indexTree, const openvdb::Name& name,
                             const GA_Attribute* const attribute, const GA_Defaults& defaults, const Index stride = 1)
 {
+    static_assert(!std::is_base_of<AttributeArray, ValueType>::value, "ValueType must not be derived from AttributeArray");
+    static_assert(!std::is_same<ValueType, openvdb::Name>::value, "ValueType must not be openvdb::Name/std::string");
+
     typedef hvdbp::HoudiniReadAttribute<ValueType> HoudiniAttribute;
 
     ValueType value = hvdb::evalAttrDefault<ValueType>(defaults, 0);
@@ -181,12 +187,10 @@ convertAttributeFromHoudini(PointDataTree& tree, const PointIndexTree& indexTree
                 convertAttributeFromHoudini<float, false, TruncateCodec>(tree, indexTree, name, attribute, defaults);
             }
             else if (compression == UNIT_FIXED_POINT_8) {
-                convertAttributeFromHoudini<TypedAttributeArray<float,
-                                            FixedPointCodec<true, UnitRange> >, false>(tree, indexTree, name, attribute, defaults);
+                convertAttributeFromHoudini<float, false, FixedPointCodec<true, UnitRange>>(tree, indexTree, name, attribute, defaults);
             }
             else if (compression == UNIT_FIXED_POINT_16) {
-                convertAttributeFromHoudini<TypedAttributeArray<float,
-                                            FixedPointCodec<false, UnitRange> >, false>(tree, indexTree, name, attribute, defaults);
+                convertAttributeFromHoudini<float, false, FixedPointCodec<false, UnitRange>>(tree, indexTree, name, attribute, defaults);
             }
         }
         else if (storage == GA_STORE_REAL64) {
@@ -244,12 +248,10 @@ convertAttributeFromHoudini(PointDataTree& tree, const PointIndexTree& indexTree
         convertAttributeFromHoudini<float, true, TruncateCodec>(tree, indexTree, name, attribute, defaults, width);
     }
     else if (storage == GA_STORE_REAL32 && compression == UNIT_FIXED_POINT_8) {
-        convertAttributeFromHoudini<TypedAttributeArray<float,
-                                    FixedPointCodec<true, UnitRange> >, true>(tree, indexTree, name, attribute, defaults, width);
+        convertAttributeFromHoudini<float, true, FixedPointCodec<true, UnitRange>>(tree, indexTree, name, attribute, defaults, width);
     }
     else if (storage == GA_STORE_REAL32 && compression == UNIT_FIXED_POINT_16) {
-        convertAttributeFromHoudini<TypedAttributeArray<float,
-                                    FixedPointCodec<false, UnitRange> >, true>(tree, indexTree, name, attribute, defaults, width);
+        convertAttributeFromHoudini<float, true, FixedPointCodec<false, UnitRange>>(tree, indexTree, name, attribute, defaults, width);
     }
     else if (storage == GA_STORE_REAL64) {
         convertAttributeFromHoudini<double, true>(tree, indexTree, name, attribute, defaults, width);
@@ -268,24 +270,6 @@ typedef std::map<Name, std::pair<int, bool> > AttributeInfoMap;
 
 
 ///////////////////////////////////////
-
-
-MetaMap& getWritableMetadata(PointDataTree& tree)
-{
-    // Copy existing Descriptor to retrieve writeable Metadata
-
-    const AttributeSet::Descriptor& descriptor = tree.cbeginLeaf()->attributeSet().descriptor();
-    AttributeSet::Descriptor::Ptr newDescriptor(new AttributeSet::Descriptor(descriptor));
-    MetaMap& metadata = newDescriptor->getMetadata();
-
-    // Reset all leaves to hold the new Descriptor
-
-    for (PointDataTree::LeafIter leafReplaceIter = tree.beginLeaf(); leafReplaceIter; ++leafReplaceIter) {
-        leafReplaceIter->resetDescriptor(newDescriptor);
-    }
-
-    return metadata;
-}
 
 
 inline
@@ -406,7 +390,8 @@ createPointDataGrid(const GU_Detail& ptGeo, const int compression,
 
         convertSegmentsFromHoudini<Vec3f, HoudiniOffsetAttribute>(tree, indexTree, "segments", vertexCount-1, segments);
 
-        getWritableMetadata(tree).insertMeta("nurbscurve", StringMetadata("segments"));
+        MetaMap& metadata = makeDescriptorUnique(tree)->getMetadata();
+        metadata.insertMeta("nurbscurve", StringMetadata("segments"));
     }
 
     // Add other attributes to PointDataGrid
@@ -437,9 +422,9 @@ createPointDataGrid(const GU_Detail& ptGeo, const int compression,
         if (isString)
         {
             // Iterate over the strings in the table and insert them into the Metadata
-            StringMetaInserter inserter(getWritableMetadata(tree));
-            for (GA_AIFSharedStringTuple::iterator  it = sharedStringTupleAIF->begin(gaAttribute),
-                                                    itEnd = sharedStringTupleAIF->end(); !(it == itEnd); ++it) {
+            MetaMap& metadata = makeDescriptorUnique(tree)->getMetadata();
+            StringMetaInserter inserter(metadata);
+            for (auto it = sharedStringTupleAIF->begin(gaAttribute), itEnd = sharedStringTupleAIF->end(); !(it == itEnd); ++it) {
                 Name str(it.getString());
                 if (!str.empty())   inserter.insert(str);
             }
