@@ -1,0 +1,144 @@
+PROJECT ( OpenVDBPoints )
+
+FIND_PACKAGE ( Boost ${MINIMUM_BOOST_VERSION} REQUIRED COMPONENTS iostreams system thread )
+FIND_PACKAGE ( ILMBase REQUIRED )
+FIND_PACKAGE ( OpenEXR REQUIRED )
+FIND_PACKAGE ( TBB REQUIRED )
+FIND_PACKAGE ( ZLIB REQUIRED )
+FIND_PACKAGE ( Blosc REQUIRED )
+FIND_PACKAGE ( OpenVDB REQUIRED )
+FIND_PACKAGE ( Doxygen REQUIRED )
+FIND_PACKAGE ( Cppunit )
+
+INCLUDE_DIRECTORIES ( ${Boost_INCLUDE_DIR} )
+INCLUDE_DIRECTORIES ( ${ILMBASE_INCLUDE_DIRS} )
+INCLUDE_DIRECTORIES ( ${TBB_INCLUDE_DIR} )
+INCLUDE_DIRECTORIES ( ${ZLIB_INCLUDE_DIR} )
+INCLUDE_DIRECTORIES ( ${OpenVDB_INCLUDE_DIRECTORY} )
+INCLUDE_DIRECTORIES ( .. ) # So they can simulate referencing installed headers
+INCLUDE_DIRECTORIES ( . ) # So they can simulate referencing installed headers
+
+IF (WIN32)
+  # Because of implicit linking!
+  LINK_DIRECTORIES ( ${Boost_LIBRARY_DIR} )
+ENDIF ()
+
+INCLUDE_DIRECTORIES ( ${BLOSC_INCLUDE_DIR} )
+
+IF (WIN32)
+  ADD_DEFINITIONS ( -D_WIN32 -DNOMINMAX -DHALF_EXPORTS -DOPENVDB_DLL )
+ELSE ()
+  ADD_DEFINITIONS ( -pthread -fPIC )
+ENDIF ()
+
+SET ( OPENVDB_POINTS_LIBRARY_SOURCE_FILES
+  openvdb.cc
+  tools/AttributeGroup.cc
+  tools/AttributeSet.cc
+  tools/AttributeArray.cc
+  tools/AttributeArrayString.cc
+  )
+
+SET_SOURCE_FILES_PROPERTIES ( ${OPENVDB_POINTS_LIBRARY_SOURCE_FILES}
+  PROPERTIES
+  COMPILE_FLAGS "-DOPENVDB_PRIVATE -DOPENVDB_USE_BLOSC"
+)
+
+ADD_LIBRARY ( openvdb_points_static STATIC
+  ${OPENVDB_POINTS_LIBRARY_SOURCE_FILES}
+  )
+ADD_LIBRARY ( openvdb_points_shared SHARED
+  ${OPENVDB_POINTS_LIBRARY_SOURCE_FILES}
+  )
+
+TARGET_LINK_LIBRARIES ( openvdb_points_static
+  ${Boost_LIBRARIES}
+  ${Tbb_TBB_LIBRARY}
+  ${Ilmbase_HALF_LIBRARY}
+  ${ZLIB_LIBRARY}
+  ${OpenVDB_LIBRARY}
+  )
+TARGET_LINK_LIBRARIES ( openvdb_points_shared
+  ${Boost_LIBRARIES}
+  ${Tbb_TBB_LIBRARY}
+  ${Ilmbase_HALF_LIBRARY}
+  ${ZLIB_LIBRARY}
+  ${BLOSC_blosc_LIBRARY} 
+  ${OpenVDB_LIBRARY}
+  )
+
+SET_TARGET_PROPERTIES ( openvdb_points_static openvdb_points_shared
+  PROPERTIES OUTPUT_NAME openvdb_points
+  )
+
+SET ( VDB_PRINT_SOURCE_FILES  cmd/openvdb_print/main.cc )
+SET_SOURCE_FILES_PROPERTIES ( ${VDB_PRINT_SOURCE_FILES}
+  PROPERTIES
+  COMPILE_FLAGS "-DOPENVDB_USE_BLOSC"
+)
+
+ADD_EXECUTABLE ( vdb_print
+  ${VDB_PRINT_SOURCE_FILES}
+  )
+
+IF(OpenVDB_USE_STATIC_LIBS)
+  SET(OpenVDBPoints_LIBRARY openvdb_points_static)
+ELSE(OpenVDB_USE_STATIC_LIBS)
+  SET(OpenVDBPoints_LIBRARY openvdb_points_shared)
+ENDIF(OpenVDB_USE_STATIC_LIBS)
+
+TARGET_LINK_LIBRARIES ( vdb_print
+  ${OpenVDB_LIBRARY}
+  ${OpenVDBPoints_LIBRARY}
+  ${BLOSC_blosc_LIBRARY} 
+  )
+
+# unit test runner (if cppunit is available)
+IF ( CPPUNIT_FOUND )
+  FILE ( GLOB UNITTEST_SOURCES unittest/*.cc )
+  SET_SOURCE_FILES_PROPERTIES ( ${UNITTEST_SOURCES}
+    PROPERTIES
+    COMPILE_FLAGS "-DOPENVDB_USE_BLOSC"
+  )
+  ADD_EXECUTABLE ( vdb_points_test ${UNITTEST_SOURCES} )
+  TARGET_LINK_LIBRARIES ( vdb_points_test
+    ${OpenVDB_LIBRARY}
+    ${OpenVDBPoints_LIBRARY}
+    ${BLOSC_blosc_LIBRARY}
+    ${CPPUNIT_LIBRARY}
+    )
+  ADD_TEST ( NAME vdb_points_test COMMAND vdb_points_test )
+ENDIF ( CPPUNIT_FOUND )
+
+# Doxygen docmentation
+FILE ( READ ${PROJECT_SOURCE_DIR}/doxygen-config DOXYGEN_CONFIG_CONTENT )
+FILE ( WRITE ${CMAKE_CURRENT_BINARY_DIR}/cmake-doxygen-config ${DOXYGEN_CONFIG_CONTENT} )
+FILE ( APPEND ${CMAKE_CURRENT_BINARY_DIR}/cmake-doxygen-config "OUTPUT_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/doc\n" )
+
+ADD_CUSTOM_TARGET ( doc
+  ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/cmake-doxygen-config
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  COMMENT "Generating API documentation with Doxygen" VERBATIM
+)
+
+INSTALL ( DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doc/html/ DESTINATION doc)
+
+# Installation
+INSTALL ( TARGETS
+  vdb_print
+  DESTINATION
+  bin
+  )
+
+INSTALL ( TARGETS
+  openvdb_points_static
+  openvdb_points_shared
+  DESTINATION
+  lib
+  )
+
+FILE ( GLOB PUBLIC_HEADERS_ROOT ${PROJECT_SOURCE_DIR}/*.h )
+INSTALL ( FILES ${PUBLIC_HEADERS_ROOT} DESTINATION include/openvdb_points )
+
+FILE ( GLOB PUBLIC_HEADERS_TOOLS ${PROJECT_SOURCE_DIR}/tools/*.h )
+INSTALL ( FILES ${PUBLIC_HEADERS_TOOLS} DESTINATION include/openvdb_points/tools )

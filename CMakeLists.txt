@@ -1,0 +1,12 @@
+# yue.nicholas@gmail.com
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
+
+ENABLE_TESTING( )
+
+PROJECT ( OpenVDB )
+
+OPTION ( OPENVDB_BUILD_PYTHON_MODULE "Build the pyopenvdb Python module" ON )
+
+LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+ADD_SUBDIRECTORY ( openvdb_points )
